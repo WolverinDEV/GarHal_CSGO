@@ -48,6 +48,9 @@ public:
 	template <typename type>
 	bool WriteVirtualMemory(ULONG ProcessId, ULONG WriteAddress, type WriteValue, SIZE_T WriteSize)
 	{
+        /* do not write anything to CS! */
+        return false;
+
 		if (hDriver == INVALID_HANDLE_VALUE)
 			return false;
 		DWORD Bytes;
