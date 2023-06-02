@@ -65,7 +65,8 @@ bool Entity::isValidPlayer()
     int health = getHealth();
     bool isDormant = IsDormant();
 
-    return health > 0 && health <= 100 && !isDormant;
+    /* 120 for Danger Zone */
+    return health > 0 && health <= 120 && !isDormant;
 }
 
 Vector3 Entity::getAbsolutePosition()
