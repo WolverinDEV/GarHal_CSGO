@@ -2,9 +2,9 @@
 #include <vector>
 #include <windows.h>
 
-#include "..\common\bsp\BSPStructure.hpp"
+#include "bsp\BSPStructure.hpp"
 #include "imgui.h"
-#include "..\common\bsp\Matrix.hpp"
+#include "bsp\Matrix.hpp"
 #include "kernelinterface.hpp"
 
 using Vector3 = Matrix<float, 3, 1>;
@@ -38,6 +38,11 @@ typedef struct _RenderData
 	std::vector<std::pair<ImVec2, ImVec2>> bones = {};
 } RenderData;
 
+struct ObserverEntry {
+    std::string name;
+    uint32_t mode;
+    bool is_local;
+};
 
 // https://github.com/ValveSoftware/source-sdk-2013/blob/0d8dceea4310fde5706b3ce1c70609d72a38efdf/sp/src/public/mathlib/mathlib.h#L237
 struct Matrix3x4
@@ -183,6 +188,19 @@ struct UserCMD_ShellCode
 	bool		shouldSet;
 };
 
+enum {
+    OBS_MODE_NONE = 0,	// not in spectator mode
+    OBS_MODE_DEATHCAM,	// special mode for death cam animation
+    OBS_MODE_FREEZECAM,	// zooms to a target, and freeze-frames on them
+    OBS_MODE_FIXED,		// view from a fixed camera position
+    OBS_MODE_IN_EYE,	// follow a player in first person view
+    OBS_MODE_CHASE,		// follow a player in third person view
+    OBS_MODE_POI,		// PASSTIME point of interest - game objective, big fight, anything interesting; added in the middle of the enum due to tons of hard-coded "<ROAMING" enum compares
+    OBS_MODE_ROAMING,	// free roaming
+
+    NUM_OBSERVER_MODES,
+};
+
 enum CSGO_Weapon_ID
 {
 	WEAPON_UNKNOWN = 0,
@@ -304,4 +322,7 @@ inline bool IsWeaponSniper(int iWeaponID)
 
 inline const float FovRange = 10.0f;
 extern DWORD ProcessId, ClientAddress, ClientSize, EngineAddress, EngineSize;
-extern KeInterface Driver;
+extern std::unique_ptr<KeInterface> Driver;
+
+class EntityList;
+extern EntityList entity_list;

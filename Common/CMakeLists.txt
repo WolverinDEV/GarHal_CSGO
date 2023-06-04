@@ -7,4 +7,4 @@ file(GLOB_RECURSE SOURCES "*.cpp" "*.hpp")
 add_library(garhal-common
     ${SOURCES}
 )
-target_include_directories(garhal-common PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(garhal-common PUBLIC .)

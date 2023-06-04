@@ -21,6 +21,18 @@
 #pragma comment(lib, "d3d11.lib") 
 #pragma comment(lib, "dwmapi.lib")
 
+
+std::array<std::string, 8> kObserverModeNames{
+    "none",
+    "deathcam",
+    "freezecam",
+    "fixed",
+    "in-eye",
+    "chase",
+    "poi",
+    "roaming"
+};
+
 class OverlayRender
 {
 public:
@@ -61,10 +73,11 @@ public:
 	SHORT KeyStates[256];
 	
 
-	void render(const std::vector<RenderData>& renderData)
+	void render(const std::vector<RenderData>& renderData, const std::vector<ObserverEntry>& si)
 	{
 		beginDraw();
 		renderAll(renderData);
+        renderSpectatorInfo(si);
 		renderMenu();
 		endDraw();	
 	}
@@ -280,6 +293,41 @@ public:
 		ImGui::PopFont();
 	}
 
+    virtual void renderSpectatorInfo(const std::vector<ObserverEntry>& si) {
+        static const auto dwFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoClipping;
+        ImGui::Begin("o", nullptr, dwFlags);
+        {
+            ImGui::SetWindowFontScale(3);
+            ImGui::Text("Spectator count: %llu", si.size());
+            if(ImGui::BeginTable("Spectators",  2)) {
+                for(auto& entry : si) {
+                    ImGui::TableNextRow();
+
+                    if(entry.is_local) {
+                        ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(0, 255, 0, 255));
+                    }
+
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%s", entry.name.c_str());
+
+                    ImGui::TableNextColumn();
+                    if(entry.mode >= kObserverModeNames.size()) {
+                        ImGui::Text("Unknown");
+                    } else {
+                        ImGui::Text("%s", kObserverModeNames[entry.mode].c_str());
+                    }
+
+
+                    if(entry.is_local) {
+                        ImGui::PopStyleColor();
+                    }
+                }
+
+                ImGui::EndTable();
+            }
+        }
+    }
+
 	virtual void renderAll(const std::vector<RenderData>& ds)
 	{
 		if (ds.empty())
@@ -295,11 +343,11 @@ public:
 		ImGui::SetNextWindowPos(ImVec2(0, 0));
 		ImGui::SetNextWindowSize(ImVec2(xScreen, yScreen));
 		static const auto dwFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoClipping;
-		ImGui::Begin("o", 0, dwFlags);
+		ImGui::Begin("o", nullptr, dwFlags);
 		{
 			ImDrawList* draw = ImGui::GetWindowDrawList();
 
-			for (RenderData p : ds)
+			for (const RenderData& p : ds)
 			{
 				if (p.inGameDistance == 0)
 				{
@@ -323,7 +371,8 @@ public:
 					float minY = p.y - 10;
 					float maxY = p.y + 10;
 					ImU32 color = ImGui::GetColorU32(p.color);
-					
+
+#if 0
 					// TODO: Implement name for yourself
 					//ImVec2 textSize = ImGui::CalcTextSize(p.name);
 					int fontSize = (int)(12 + 6 * getFactorFromDistance(p.inGameDistance, p.scale));
@@ -334,7 +383,7 @@ public:
 					
 					draw->AddText(mapFont[fontSize], fontSize, ImVec2(p.x - textSize.x / 2,
 						p.y - 1.5 * textSize.y - 2 * radius * getFactorFromDistance(p.inGameDistance, p.scale)), color, p.name);
-
+#endif
 					
 					// Bone render
 					for (const std::pair<ImVec2, ImVec2>& bonePair : p.bones)
@@ -364,7 +413,7 @@ public:
 							ImVec2(firstBone.x, firstBone.y),
 							ImVec2(secondBone.x, secondBone.y),
 							color,
-							1.f);
+							6.f);
 
 
 					}
@@ -473,7 +522,7 @@ public:
 		Sleep(1000);
 
 #ifndef _DEBUG
-		ShowWindow(GetConsoleWindow(), SW_HIDE);
+		//ShowWindow(GetConsoleWindow(), SW_HIDE);
 #endif
 		
 		return true;

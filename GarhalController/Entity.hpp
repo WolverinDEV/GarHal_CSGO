@@ -11,6 +11,8 @@ private:
     StudioBBox StudioHitBoxes[MAX_STUDIO_BONES];
     StudioBone StudioBones[MAX_STUDIO_BONES];
 public:
+    static auto getLocalPlayer() -> Entity;
+
     Vector3 BonePositions[MAX_STUDIO_BONES];
     std::pair<int, int> BonePairs[MAX_STUDIO_BONES];
     uint8_t CurrentBonePairs = 0;
@@ -28,6 +30,7 @@ public:
     DWORD GetCurrentWeapon();
 	
     uint32_t GetEntityAddress();
+        uint32_t GetEntityIndex();
     uint32_t GetGlowIndex();
     uint16_t GetCurrentWeaponID();
     uint16_t GetWeaponIndex();
@@ -36,6 +39,8 @@ public:
     uint8_t getHealth();
     uint8_t getForceAttack();
     uint8_t getTeam();
+    uint32_t getObserverTarget();
+    uint32_t getObserverMode();
     void BuildBonePairs();
     void SetFlashAlpha(float num);
     void SetForceJump(uint8_t value);
@@ -47,8 +52,25 @@ public:
     bool IsDormant();
     bool IsDefusing();
     bool isInAir();
+    bool isValid();
     bool isValidPlayer();
     bool IsCrouching();
+
+    auto operator!=(const Entity& /* other */) const noexcept -> bool;
+    inline auto operator==(const Entity& other) const noexcept -> bool {
+        return this->EntityAddress == other.EntityAddress;
+    }
+
+    inline auto operator=(Entity& other) noexcept -> Entity& {
+        this->EntityAddress = other.EntityAddress;
+        return *this;
+    }
+
+    inline auto operator=(const Entity& other) noexcept -> Entity& {
+        this->EntityAddress = other.EntityAddress;
+        return *this;
+    }
+
     Entity();
     Entity(uint32_t EntityAddress);
     ~Entity();

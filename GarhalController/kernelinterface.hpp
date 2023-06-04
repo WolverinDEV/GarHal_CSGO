@@ -10,13 +10,40 @@ class KeInterface
 public:
 	// Handle to driver
 	HANDLE hDriver;
+    bool noWrite;
 
 	// Initializer
-	KeInterface(LPCSTR RegistryPath)
+	explicit KeInterface(LPCSTR RegistryPath)
 	{
-		hDriver = CreateFileA(RegistryPath, GENERIC_READ | GENERIC_WRITE,
-			FILE_SHARE_READ | FILE_SHARE_WRITE, 0, OPEN_EXISTING, 0, 0);
+		this->hDriver = CreateFileA(RegistryPath, GENERIC_READ | GENERIC_WRITE,
+			FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+        this->noWrite = false;
 	}
+
+    [[nodiscard]]
+    inline auto IsValid() const -> bool {
+        return this->hDriver != INVALID_HANDLE_VALUE;
+    }
+
+    template <typename type>
+    type ReadVirtualMemoryT(ULONG ProcessId, ULONG ReadAddress)
+    {
+        return ReadVirtualMemory<type>(ProcessId, ReadAddress, sizeof(type));
+    }
+
+    [[nodiscard("read success should be checked")]]
+    bool ReadVirtualMemoryBuffer(ULONG ProcessId, ULONG address, void* buffer, size_t size) const
+    {
+        KERNEL_READ_REQUEST ReadRequest;
+
+        ReadRequest.ProcessId = ProcessId;
+        ReadRequest.Address = address;
+
+        ReadRequest.pBuff = buffer;
+        ReadRequest.Size = size;
+
+        return (DeviceIoControl(hDriver, IO_READ_REQUEST, &ReadRequest, sizeof(ReadRequest), &ReadRequest, sizeof(ReadRequest), nullptr, nullptr) == TRUE);
+    }
 
 	template <typename type>
 	type ReadVirtualMemory(ULONG ProcessId, ULONG ReadAddress, SIZE_T Size)
@@ -24,7 +51,6 @@ public:
 		// allocate a buffer with specified type to allow our driver to write our wanted data inside this buffer
 		type Buffer;
 
-		DWORD Return, Bytes;
 		KERNEL_READ_REQUEST ReadRequest;
 
 
@@ -33,26 +59,39 @@ public:
 
 		//send the 'address' of the buffer so our driver can know where to write the data
 		ReadRequest.pBuff = &Buffer;
-
 		ReadRequest.Size = Size;
 
 		// send code to our driver with the arguments
-		if (DeviceIoControl(hDriver, IO_READ_REQUEST, &ReadRequest, sizeof(ReadRequest), &ReadRequest, sizeof(ReadRequest), 0, 0)) 
+		if (DeviceIoControl(
+                hDriver,
+                IO_READ_REQUEST,
+                &ReadRequest, sizeof(ReadRequest),
+                &ReadRequest, sizeof(ReadRequest),
+                nullptr, nullptr
+        ))
 		{
 			//return our buffer
 			return Buffer;
 		}
+
 		return Buffer;
 	}
 
 	template <typename type>
 	bool WriteVirtualMemory(ULONG ProcessId, ULONG WriteAddress, type WriteValue, SIZE_T WriteSize)
 	{
-        /* do not write anything to CS! */
-        return false;
+        if(this->noWrite) {
+            /*
+             * Do not allow any operations which writes into CS memory.
+             * With no write and as external application you're totally invisible (at least to the game itself).
+             */
+            return false;
+        }
 
-		if (hDriver == INVALID_HANDLE_VALUE)
-			return false;
+        if(!this->IsValid()) {
+            return false;
+        }
+
 		DWORD Bytes;
 
 		KERNEL_WRITE_REQUEST  WriteRequest;
@@ -64,17 +103,16 @@ public:
 
 		WriteRequest.Size = WriteSize;
 
-		if (DeviceIoControl(hDriver, IO_WRITE_REQUEST, &WriteRequest, sizeof(WriteRequest), 0, 0, &Bytes, NULL)) 
+		if (DeviceIoControl(hDriver, IO_WRITE_REQUEST, &WriteRequest, sizeof(WriteRequest), nullptr, 0, &Bytes, nullptr))
 		{
 			return true;
 		}
 		return false;
 	}
 
-	bool ReadSpecial(ULONG ProcessId, DWORD dwAddress, LPVOID lpBuffer, DWORD dwSize)
+    [[nodiscard("read success should be checked")]]
+    bool ReadSpecial(ULONG ProcessId, DWORD dwAddress, LPVOID lpBuffer, DWORD dwSize) const
 	{
-		SIZE_T Out = NULL;
-
 		KERNEL_READ_REQUEST ReadRequest;
 
 		ReadRequest.ProcessId = ProcessId;
@@ -84,27 +122,33 @@ public:
 
 		ReadRequest.Size = dwSize;
 
-		return (DeviceIoControl(hDriver, IO_READ_REQUEST, &ReadRequest, sizeof(ReadRequest), &ReadRequest, sizeof(ReadRequest), 0, 0) == TRUE);
+		return (DeviceIoControl(hDriver, IO_READ_REQUEST, &ReadRequest, sizeof(ReadRequest), &ReadRequest, sizeof(ReadRequest), nullptr, nullptr) == TRUE);
 	}
 
-	bool RequestProtection()
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "modernize-use-nodiscard"
+    bool RequestProtection() const
 	{
-		if (hDriver == INVALID_HANDLE_VALUE)
-			return false;
+        if(!this->IsValid()) {
+            return false;
+        }
 
-		return DeviceIoControl(hDriver, IO_PROTECT_CONTROLLER, 0, 0, 0, 0, 0, 0);
+		return DeviceIoControl(hDriver, IO_PROTECT_CONTROLLER, nullptr, 0, nullptr, 0, nullptr, nullptr);
 	}
+#pragma clang diagnostic pop
 
-	DWORD GetTargetPid()
+    [[nodiscard]]
+    DWORD GetTargetPid() const
 	{
-		if (hDriver == INVALID_HANDLE_VALUE)
-			return false;
+        if(!this->IsValid()) {
+            return false;
+        }
 
 		ULONG Id;
 		DWORD Bytes;
 
 		if (DeviceIoControl(hDriver, IO_GET_ID_REQUEST, &Id, sizeof(Id),
-			&Id, sizeof(Id), &Bytes, NULL)) 
+			&Id, sizeof(Id), &Bytes, nullptr))
 		{
 			return Id;
 		}
@@ -112,32 +156,36 @@ public:
 		return false;
 	}
 
-	DWORD GetClientModule()
+    [[nodiscard]]
+    DWORD GetClientModule() const
 	{
-		if (hDriver == INVALID_HANDLE_VALUE)
-			return false;
+        if(!this->IsValid()) {
+            return false;
+        }
 
 		ULONG Address;
 		DWORD Bytes;
 
 		if (DeviceIoControl(hDriver, IO_GET_MODULE_REQUEST, &Address, sizeof(Address),
-			&Address, sizeof(Address), &Bytes, NULL)) 
+			&Address, sizeof(Address), &Bytes, nullptr))
 		{
 			return Address;
 		}
 		return false;
 	}
 
-	DWORD GetClientModuleSize()
+    [[nodiscard]]
+    DWORD GetClientModuleSize() const
 	{
-		if (hDriver == INVALID_HANDLE_VALUE)
-			return false;
+        if(!this->IsValid()) {
+            return false;
+        }
 
 		ULONG Address;
 		DWORD Bytes;
 
 		if (DeviceIoControl(hDriver, IO_GET_MODULE_REQUEST_LENGTH, &Address, sizeof(Address),
-			&Address, sizeof(Address), &Bytes, NULL))
+			&Address, sizeof(Address), &Bytes, nullptr))
 		{
 			return Address;
 		}
@@ -145,39 +193,44 @@ public:
 	}
 
 
-	DWORD GetEngineModule()
+	[[nodiscard]]
+    DWORD GetEngineModule() const
 	{
-		if (hDriver == INVALID_HANDLE_VALUE)
-			return false;
+        if(!this->IsValid()) {
+            return false;
+        }
 
 		ULONG Address;
 		DWORD Bytes;
 
 		if (DeviceIoControl(hDriver, IO_GET_ENGINE_MODULE_REQUEST, &Address, sizeof(Address),
-			&Address, sizeof(Address), &Bytes, NULL))
+			&Address, sizeof(Address), &Bytes, nullptr))
 		{
 			return Address;
 		}
 		return false;
 	}
 
-	DWORD GetEngineModuleSize()
+    [[nodiscard]]
+	DWORD GetEngineModuleSize() const
 	{
-		if (hDriver == INVALID_HANDLE_VALUE)
-			return false;
+        if(!this->IsValid()) {
+            return false;
+        }
 
 		ULONG Address;
 		DWORD Bytes;
 
 		if (DeviceIoControl(hDriver, IO_GET_ENGINE_MODULE_REQUEST_LENGTH, &Address, sizeof(Address),
-			&Address, sizeof(Address), &Bytes, NULL))
+			&Address, sizeof(Address), &Bytes, nullptr))
 		{
 			return Address;
 		}
 		return false;
 	}
 
-	BOOL DataCompare(const BYTE* pData, const BYTE* pMask, const char* pszMask)
+    [[nodiscard]]
+	BOOL DataCompare(const BYTE* pData, const BYTE* pMask, const char* pszMask) const
 	{
 		for (; *pszMask; ++pszMask, ++pData, ++pMask)
 		{
@@ -189,7 +242,8 @@ public:
 		return (*pszMask == 0);
 	}
 
-	DWORD Scan(ULONG ProcessId, DWORD dwStart, DWORD dwSize, const char* pSignature, const char* pMask)
+    [[nodiscard]]
+	DWORD Scan(ULONG ProcessId, DWORD dwStart, DWORD dwSize, const char* pSignature, const char* pMask) const
 	{
 		BYTE* pRemote = new BYTE[dwSize];
 		if (!ReadSpecial(ProcessId, dwStart, pRemote, dwSize))

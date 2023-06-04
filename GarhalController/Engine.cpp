@@ -7,7 +7,7 @@ using namespace hazedumper::signatures;
 
 bool engine::worldToScreen(const Vector3& from, Vector3& to)
 {
-    WorldToScreenMatrix matrix = Driver.ReadVirtualMemory<WorldToScreenMatrix>(ProcessId, ClientAddress + dwViewMatrix, sizeof(WorldToScreenMatrix));
+    WorldToScreenMatrix matrix = Driver->ReadVirtualMemory<WorldToScreenMatrix>(ProcessId, ClientAddress + dwViewMatrix, sizeof(WorldToScreenMatrix));
 
     const auto w = matrix(3, 0) * from(0) + matrix(3, 1) * from(1) + matrix(3, 2) * from(2) + matrix(3, 3);
     if (w < 0.001f)
@@ -23,8 +23,8 @@ bool engine::worldToScreen(const Vector3& from, Vector3& to)
 
 bool engine::IsInGame()
 {
-    uint32_t ClientState = Driver.ReadVirtualMemory<uint32_t>(ProcessId, EngineAddress + dwClientState, sizeof(uint32_t));
-    uint32_t Second = Driver.ReadVirtualMemory<uint32_t>(ProcessId, ClientState + dwClientState_State, sizeof(uint32_t));
+    uint32_t ClientState = Driver->ReadVirtualMemory<uint32_t>(ProcessId, EngineAddress + dwClientState, sizeof(uint32_t));
+    uint32_t Second = Driver->ReadVirtualMemory<uint32_t>(ProcessId, ClientState + dwClientState_State, sizeof(uint32_t));
     return GetGameState(Second) == InGame;
 }
 
@@ -43,12 +43,12 @@ GameState engine::GetGameState(uint8_t State)
 
 Vector3 engine::getViewAngles()
 {
-    uint32_t ClientState = Driver.ReadVirtualMemory<uint32_t>(ProcessId, EngineAddress + dwClientState, sizeof(uint32_t));
-    return Driver.ReadVirtualMemory<Vector3>(ProcessId, ClientState + dwClientState_ViewAngles, sizeof(Vector3));
+    uint32_t ClientState = Driver->ReadVirtualMemory<uint32_t>(ProcessId, EngineAddress + dwClientState, sizeof(uint32_t));
+    return Driver->ReadVirtualMemory<Vector3>(ProcessId, ClientState + dwClientState_ViewAngles, sizeof(Vector3));
 }
 
 void engine::setViewAngles(Vector3& viewAngles)
 {
-    uint32_t clientState = Driver.ReadVirtualMemory<uint32_t>(ProcessId, EngineAddress + dwClientState, sizeof(uint32_t));
-    Driver.WriteVirtualMemory<Vector3>(ProcessId, clientState + dwClientState_ViewAngles, viewAngles, sizeof(viewAngles));
+    uint32_t clientState = Driver->ReadVirtualMemory<uint32_t>(ProcessId, EngineAddress + dwClientState, sizeof(uint32_t));
+    Driver->WriteVirtualMemory<Vector3>(ProcessId, clientState + dwClientState_ViewAngles, viewAngles, sizeof(viewAngles));
 }

@@ -5,25 +5,25 @@
 #include "offsets.hpp"
 #include "data.hpp"
 #include <iostream>
-#include <TlHelp32.h>
 #include "Aimbot.hpp"
-#include "..\common\bsp\BSPParser.hpp"
-#include "engine.hpp"
+#include "Engine.hpp"
 #include "Entity.hpp"
 #include <Windows.h>
+#include <optional>
 #include "csgo_menu.hpp"
 #include "csgo_settings.hpp"
 #include "imgui_extensions.h"
 #include "utils.hpp"
+#include "./memory.hpp"
 
 // hazedumper namespace
 using namespace hazedumper::netvars;
 using namespace hazedumper::signatures;
 
 // Declarations
-inline Aimbot aim = NULL;
+inline Aimbot aim;
 DWORD ProcessId, ClientAddress, ClientSize, EngineAddress, EngineSize;
-KeInterface Driver = NULL;
+std::unique_ptr<KeInterface> Driver{nullptr};
 
 [[noreturn]]
 void TriggerBotThread()
@@ -47,7 +47,7 @@ void TriggerBotThread()
             continue;
         }
 
-        //uint32_t LocalPlayer = Driver.ReadVirtualMemory<uint32_t>(ProcessId, ClientAddress + dwLocalPlayer, sizeof(uint32_t));
+        //uint32_t LocalPlayer = Driver->ReadVirtualMemory<uint32_t>(ProcessId, ClientAddress + dwLocalPlayer, sizeof(uint32_t));
         Entity LocalPlayerEnt = aim.localPlayer;
 
         if (csgo_settings::TriggerBotKey == 0 || ImGui::IsCustomKeyPressed(csgo_settings::TriggerBotKey, true))
@@ -77,68 +77,294 @@ void TriggerBotThread()
     }
 }
 
+typedef struct player_info_s
+{
+    char _pad1[0x10];
+    char name[80];//80
+    char _pad2[0x64];
+    char _pad3[0x17B];
+
+} player_info_t;
+
+std::array<const char*, 20> kRankNames{
+        "Not ranked",
+        "Silver I",
+        "Silver II",
+        "Silver III",
+        "Silver IV",
+        "Silver Elite",
+        "Silver Elite Master",
+
+        "Gold Nova I",
+        "Gold Nova II",
+        "Gold Nova III",
+        "Gold Nova Master",
+        "Master Guardian I",
+        "Master Guardian II",
+
+        "Master Guardian Elite",
+        "Distinguished Master Guardian",
+        "Legendary Eagle",
+        "Legendary Eagle Master",
+        "Supreme Master First Class",
+        "The Global Elite",
+
+        "<< invalid >>"
+};
+
+class EntityList {
+        struct EntityListIterator;
+        friend struct EntityListIterator;
+
+        struct EntityIterator {
+            explicit EntityIterator() noexcept : index{0}, end_index{0} {}
+            explicit EntityIterator(size_t index, size_t end_index) noexcept : index{index}, end_index{end_index} {}
+
+            auto operator++() noexcept -> EntityIterator& {
+                while(++this->index < this->end_index) {
+                    if(!this->current_entity().isValid()) {
+                        continue;
+                    }
+
+                    /* next valid player has been found */
+                    return *this;
+                }
+
+                /* no more valid players available */
+                return *this;
+            }
+
+            auto operator!=(const EntityIterator& other) const noexcept -> bool {
+                return this->index != other.index;
+            }
+
+            auto operator*() const noexcept -> Entity {
+                return this->current_entity();
+            }
+
+            [[nodiscard]]
+            auto current_entity() const noexcept -> Entity {
+                return Entity{
+            Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, ClientAddress + dwEntityList + this->index * 0x10)
+                };
+            }
+
+            size_t index;
+            size_t end_index;
+        };
+
+        struct EntityListIterator {
+            explicit EntityListIterator(const EntityList* handle) noexcept : handle{handle} {}
+
+            [[nodiscard]]
+            auto begin() const noexcept -> EntityIterator {
+                return EntityIterator(0, this->handle->entity_list_size);
+            }
+
+            [[nodiscard]]
+            auto end() const noexcept -> EntityIterator {
+                return EntityIterator(this->handle->entity_list_size, this->handle->entity_list_size);
+            }
+
+            const EntityList* handle;
+        };
+    public:
+        size_t entity_list_size{64};
+
+        [[nodiscard]]
+        auto get_from_handle(uint32_t handle) const -> std::optional<Entity> {
+            if((handle & 0xFFF) == 0xFFF) {
+                return std::nullopt;
+            }
+
+            auto entity_index = (handle & 0xFFF) - 1;
+            return this->get_from_index(entity_index);
+        }
+
+        [[nodiscard]]
+        auto get_from_index(uint32_t index) const -> std::optional<Entity> {
+            if(index > this->entity_list_size) {
+                return std::nullopt;
+            }
+
+            Entity entity{
+        Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, ClientAddress + dwEntityList + index * 0x10)
+            };
+            if(!entity.isValid()) {
+                return std::nullopt;
+            }
+
+            return std::optional{entity};
+        }
+
+        auto get_entities(std::vector<Entity>& result) const -> bool {
+            for (size_t i{0}; i < this->entity_list_size; i++) {
+                Entity entity{
+            Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, ClientAddress + dwEntityList + i * 0x10)
+                };
+                if(!entity.isValid()) {
+                    continue;
+                }
+
+                result.push_back(entity);
+            }
+
+            return true;
+        }
+
+        [[nodiscard]]
+        auto iterate_entities() const -> EntityListIterator {
+            return EntityListIterator{this};
+        }
+};
+EntityList entity_list;
+
+class PlayerInfoHelper {
+    public:
+        void initialize() {
+            this->dict_items = memory::dereference(EngineAddress, dwClientState, dwClientState_PlayerInfo, 0x40, 0x0C);
+        }
+
+        auto load_info(size_t player_index, player_info_t& result) const -> bool {
+            if(!this->dict_items) {
+                std::memset(&result, 0, sizeof(player_info_t));
+                return false;
+            }
+
+            auto player_info_address = memory::dereference(this->dict_items, 0x28 + player_index * 0x34);
+            return memory::read(player_info_address, result);
+        }
+
+    private:
+        uint32_t dict_items{0};
+};
+PlayerInfoHelper player_info_helper;
+
+void UpdateObserverList(std::vector<ObserverEntry>& observer_list) {
+    auto local_player = Entity::getLocalPlayer();
+    auto target_player = local_player;
+    if(target_player.getObserverMode() != OBS_MODE_NONE && target_player.getObserverMode() != OBS_MODE_POI) {
+        auto observe_target = entity_list.get_from_handle(target_player.getObserverTarget());
+        if(observe_target.has_value()) {
+            target_player = *observe_target;
+        }
+    }
+
+    if(!target_player.isValidPlayer()) {
+        return;
+    }
+
+    player_info_t player_info;
+    for(auto entity : entity_list.iterate_entities()) {
+        if(entity == target_player) {
+            continue;
+        }
+
+        auto observer_mode = entity.getObserverMode();
+        if(observer_mode == OBS_MODE_NONE || observer_mode == OBS_MODE_POI) {
+            continue;
+        }
+
+        auto observer_target = entity_list.get_from_handle(entity.getObserverTarget());
+        if(!observer_target.has_value()) {
+            continue;
+        }
+
+        if(observer_target->GetEntityAddress() != target_player.GetEntityAddress()) {
+            continue;
+        }
+
+        if(!player_info_helper.load_info(entity.GetEntityIndex(), player_info)) {
+            /* 22, include the null terminator */
+            memcpy(player_info.name, "Unknown (load failed)", 22);
+        }
+
+        observer_list.emplace_back(ObserverEntry{
+                .name = std::string{player_info.name},
+                .mode = entity.getObserverMode(),
+                .is_local = entity == local_player
+        });
+    }
+}
+
+void PrintPlayerRanks() {
+    auto PlayerResource = Driver->ReadVirtualMemory<uint32_t>(ProcessId, ClientAddress + dwPlayerResource, sizeof(uint32_t));
+    player_info_t player_info;
+
+    for(auto entry : entity_list.iterate_entities()) {
+        auto entry_index = entry.GetEntityIndex();
+
+        // TODO: I'm not sure what's wrong but the data does not match what we expect.
+        auto Rank = Driver->ReadVirtualMemory<uint8_t>(ProcessId, PlayerResource + m_iCompetitiveRanking + (entry_index * 0x04), sizeof(uint8_t));
+        auto Wins = Driver->ReadVirtualMemory<uint16_t>(ProcessId, PlayerResource + m_iCompetitiveWins + (entry_index * 0x04), sizeof(uint16_t));
+
+        if(!player_info_helper.load_info(entry_index, player_info)) {
+            /* 22, include the null terminator */
+            memcpy(player_info.name, "Unknown (load failed)", 22);
+        }
+
+        if(Rank >= kRankNames.size()) {
+            /* last rank is the "invalid" rank state */
+            Rank = kRankNames.size() - 1;
+        }
+
+        std::cout << "===Player[" << entry_index << "]===" << std::endl;
+        std::cout << player_info.name << std::endl;
+        std::cout << kRankNames[Rank] << std::endl;
+        std::cout << "Wins: " << Wins << std::endl;
+        std::cout << std::endl;
+    }
+}
+
+// Get address of client.dll, engine.dll, and PID.
+void SetupAddresses() {
+    bool PrintOnce = false;
+    while(true) {
+        ProcessId = Driver->GetTargetPid();
+        ClientAddress = Driver->GetClientModule();
+        EngineAddress = Driver->GetEngineModule();
+        ClientSize = Driver->GetClientModuleSize();
+        EngineSize = Driver->GetEngineModuleSize();
+
+        if(ProcessId != 0 && ClientAddress != 0 && EngineAddress != 0 && ClientSize != 0 && EngineSize!= 0) {
+            break;
+        }
+
+        if (!PrintOnce)
+        {
+            std::cout << "Waiting for CSGO... " << std::endl;
+            PrintOnce = true;
+        }
+    }
+}
+
 int main(int argc, char* argv[], char* envp[])
 {
-    if (!utils::IsProcessElevated(GetCurrentProcess()))
-    {
-        std::cout << "Process is not elevated!" << std::endl;
-        MessageBoxA(0, "Process is not elevated!", "Garhal", MB_OK | MB_ICONWARNING);
+
+    Driver = std::make_unique<KeInterface>(R"(\\.\garhalop)");
+    if(!Driver->IsValid()) {
+        std::string message;
+        if(utils::IsProcessElevated(GetCurrentProcess())) {
+        }
+
+        std::cout << "Could not connect to kernel interface. May run as administrator?\n";
+        MessageBoxA(nullptr, "Could not connect to kernel interface. May run as administrator?", "Garhal", MB_OK | MB_ICONWARNING);
         return 0x1;
     }
 
-    Driver = KeInterface("\\\\.\\garhalop");
     std::string random = utils::GenerateStr(20);
     SetConsoleTitleA(random.c_str());
 
     // Get address of client.dll, engine.dll, and PID.
-    ProcessId = Driver.GetTargetPid();
-    ClientAddress = Driver.GetClientModule();
-    EngineAddress = Driver.GetEngineModule();
-    ClientSize = Driver.GetClientModuleSize();
-    EngineSize = Driver.GetEngineModuleSize();
-
-    bool PrintOnce = false;
-
-    while (ProcessId == 0 || ClientAddress == 0 || EngineAddress == 0 || ClientSize == 0 || EngineSize == 0)
-    {
-        if (!PrintOnce)
-        {
-            std::cout << "Addresses are 0x0. Waiting for CSGO... " << std::endl;
-            PrintOnce = true;
-        }
-
-        Sleep(1000);
-        ProcessId = Driver.GetTargetPid();
-        ClientAddress = Driver.GetClientModule();
-        EngineAddress = Driver.GetEngineModule();
-        ClientSize = Driver.GetClientModuleSize();
-        EngineSize = Driver.GetEngineModuleSize();
-    }
-
+    SetupAddresses();
     std::cout << "Addresses look good. Starting..." << std::endl;
+    std::cout << "Safe GarHal made by DreTaX and WolverinDEV" << std::endl;
 
-    // Initialize our renderer
-    CSGORender csgoRender;
-    if (!csgoRender.createWindow())
-    {
-        std::cout << "Failed to create window!" << std::endl;
-        MessageBoxA(0, "Failed to create window!", "Garhal", MB_OK | MB_ICONWARNING);
-        return 0x1;
-    }
-
-    // Prep parser
-    hazedumper::BSPParser bspParser;
-
-    std::cout << "GarHal made by DreTaX" << std::endl;
     std::cout << "==== Memory Addresses ====" << std::endl;
     std::cout << "ProcessID: " << ProcessId << std::endl;
     std::cout << "ClientAddress: " << std::hex << ClientAddress << std::endl;
     std::cout << "EngineAddress: " << std::hex << EngineAddress << std::endl;
     std::cout << "ClientSize: " << std::hex << ClientSize << std::endl;
-
-    // Old glow is now flagged.
-    //uint32_t GlowObject = Driver.ReadVirtualMemory<uint32_t>(ProcessId, ClientAddress + dwGlowObjectManager, sizeof(uint32_t));
-    //std::cout << "GlowObject: " << GlowObject << std::endl;
 
     std::cout << "==== Config Values ====" << std::endl;
     std::cout << "AimbotState: " << static_cast<unsigned>(csgo_settings::AimbotState) << std::endl;
@@ -153,20 +379,36 @@ int main(int argc, char* argv[], char* envp[])
     std::cout << "TriggerBotDelay: " << std::boolalpha << csgo_settings::TriggerBotDelay << std::endl;
     std::cout << "Radar: " << std::boolalpha << csgo_settings::Radar << std::endl;
 
+    player_info_helper.initialize();
+
+    PrintPlayerRanks();
+
+    // Initialize our renderer
+    CSGORender csgoRender;
+    if (!csgoRender.createWindow()) {
+        std::cout << "Failed to create window!" << std::endl;
+        MessageBoxA(nullptr, "Failed to create window!", "Garhal", MB_OK | MB_ICONWARNING);
+        return 0x1;
+    }
+
+    // Prep parser
+    hazedumper::BSPParser bspParser;
     aim = Aimbot(&bspParser);
 
     std::thread TriggerBotT(TriggerBotThread);
 
-    Driver.RequestProtection();
+    Driver->RequestProtection();
 
     // We are creating a renderData list where you can dump all the informations you wish to render
     // Note that we are currently only using this to render bones, It is up to you what you make out of it.
     std::vector<RenderData> renderDatas;
+    std::vector<ObserverEntry> observerEntries;
 
     while (true)
     {
         // Clear render datas
         renderDatas.clear();
+        observerEntries.clear();
         
         if (!engine::IsInGame())
         {
@@ -176,16 +418,9 @@ int main(int argc, char* argv[], char* envp[])
 
         // Ready to read, reserve a potentional amount in the memory.
         renderDatas.reserve(64);
+        observerEntries.reserve(64);
 
-        /* Old glow is now flagged.
-        if (csgo_settings::Wallhack)
-        {
-            GlowObject = Driver.ReadVirtualMemory<uint32_t>(ProcessId, ClientAddress + dwGlowObjectManager, sizeof(uint32_t));
-        }*/
-
-        uint32_t LocalPlayer = Driver.ReadVirtualMemory<uint32_t>(ProcessId, ClientAddress + dwLocalPlayer, sizeof(uint32_t));
-        Entity LocalPlayerEnt = Entity(LocalPlayer);
-
+        Entity LocalPlayerEnt = Entity::getLocalPlayer();
         if (aim.localPlayer.GetEntityAddress() != LocalPlayerEnt.GetEntityAddress())
         {
             aim.localPlayer = LocalPlayerEnt;
@@ -199,76 +434,65 @@ int main(int argc, char* argv[], char* envp[])
 
         Vector3 myPosition = LocalPlayerEnt.getAbsolutePosition();
 
-        for (short int i = 0; i < 64; i++)
-        {
-            uint32_t EntityAddr = Driver.ReadVirtualMemory<uint32_t>(ProcessId, ClientAddress + dwEntityList + i * 0x10,
-                                                                     sizeof(uint32_t));
-
-            if (EntityAddr == NULL)
-            {
+        for(auto entity : entity_list.iterate_entities()) {
+            if(!entity.isValidPlayer() || entity.IsDormant()) {
                 continue;
             }
 
             if (csgo_settings::Wallhack)
             {
-                Entity ent = utils::CreateEntity(EntityAddr);
-                if (ent.isValidPlayer() && !ent.IsDormant())
+                Vector3 screenPos;
+                Vector3 position = entity.getAbsolutePosition();
+                if (engine::worldToScreen(position, screenPos))
                 {
-                    Vector3 screenPos;
-                    Vector3 position = ent.getAbsolutePosition();
-                    if (engine::worldToScreen(position, screenPos))
+                    entity.BuildBonePairs();
+
+                    const float distance = (position - myPosition).norm();
+                    RenderData renderData = entity.getRenderData(OurTeam, screenPos, distance);
+
+                    Vector3 headScreenPos;
+                    if (engine::worldToScreen(entity.getHeadPosition(), headScreenPos))
                     {
-                        ent.BuildBonePairs();
-
-                        const float distance = (position - myPosition).norm();
-                        RenderData renderData = ent.getRenderData(OurTeam, screenPos, distance);
-
-                        Vector3 headScreenPos;
-                        if (engine::worldToScreen(ent.getHeadPosition(), headScreenPos))
-                        {
-                            renderData.headPos = ImVec2(headScreenPos.at(0), headScreenPos.at(1));
-                        }
-                        
-                        for (size_t y = 0; y < ent.CurrentBonePairs; ++y)
-                        {
-                            const auto& pair = ent.BonePairs[y];
-
-                            if (pair.first == pair.second || pair.first < 0 || pair.second < 0 || pair.first > 128 || pair.second > 128)
-                            {
-                                continue;
-                            }
-
-                            Vector3 boneScreenPos;
-                            Vector3 boneScreenPos2;
-                            if (engine::worldToScreen(ent.BonePositions[pair.first], boneScreenPos)
-                                && engine::worldToScreen(ent.BonePositions[pair.second], boneScreenPos2))
-                            {
-                                renderData.bones.emplace_back(ImVec2(boneScreenPos.at(0), boneScreenPos.at(1)),
-                                    ImVec2(boneScreenPos2.at(0), boneScreenPos2.at(1)));
-                            }
-                        }
-                        
-                        renderDatas.push_back(renderData);
+                        renderData.headPos = ImVec2(headScreenPos.at(0), headScreenPos.at(1));
                     }
-                    // Old glow is now flagged.
-                    //ent.SetCorrectGlowStruct(OurTeam, GlowObject);
+
+                    for (size_t y = 0; y < entity.CurrentBonePairs; ++y)
+                    {
+                        const auto& pair = entity.BonePairs[y];
+
+                        if (pair.first == pair.second || pair.first < 0 || pair.second < 0 || pair.first > 128 || pair.second > 128)
+                        {
+                            continue;
+                        }
+
+                        Vector3 boneScreenPos;
+                        Vector3 boneScreenPos2;
+                        if (engine::worldToScreen(entity.BonePositions[pair.first], boneScreenPos)
+                            && engine::worldToScreen(entity.BonePositions[pair.second], boneScreenPos2))
+                        {
+                            renderData.bones.emplace_back(ImVec2(boneScreenPos.at(0), boneScreenPos.at(1)),
+                                ImVec2(boneScreenPos2.at(0), boneScreenPos2.at(1)));
+                        }
+                    }
+
+                    renderDatas.push_back(renderData);
                 }
+                // Old glow is now flagged.
+                //ent.SetCorrectGlowStruct(OurTeam, GlowObject);
             }
 
             // TODO: Implement your own 2D radar into the rendering as using this will flag you.
             if (csgo_settings::Radar)
             {
-                Entity ent = utils::CreateEntity(EntityAddr);
-                if (ent.isValidPlayer() && !ent.IsDormant())
-                {
-                    Driver.WriteVirtualMemory<bool>(ProcessId, EntityAddr + m_bSpotted, true, sizeof(bool));
-                }
+                Driver->WriteVirtualMemory<bool>(ProcessId, entity.GetEntityAddress() + m_bSpotted, true, sizeof(bool));
             }
         }
 
+        UpdateObserverList(observerEntries);
+
         // Render all
         csgoRender.PollSystem();
-        csgoRender.render(renderDatas);
+        csgoRender.render(renderDatas, observerEntries);
 
         // This is flagged, use It only by understanding that you might get banned.
         if (csgo_settings::Bhop)
