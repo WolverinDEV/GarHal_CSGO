@@ -1,4 +1,9 @@
 [![IMAGE ALT TEXT HERE](https://i.imgur.com/RCDePZO.png)](https://i.imgur.com/RCDePZO.png)
+# ATTENTION
+This is a fork containing modifications and additions to the original GarHal.  
+As I only use this for retrieving and visualizing extra info like a bomb timer, damage indicator or rank viewer
+some features might be broken.  
+  
 # GarHal_CSGO
 A project that demonstrates how to screw with CSGO from Kernel Space.
 Project comes with updated offsets, my aim was to create a project with more features achieved using a driver.
