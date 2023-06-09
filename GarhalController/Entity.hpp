@@ -1,6 +1,13 @@
 #pragma once
 #include "data.hpp"
 
+namespace netvar {
+    struct ClientClass;
+}
+
+// TODO:
+// - Seperate different entity functionality into own classes
+// - do not store any data
 class Entity
 {
 private:
@@ -16,7 +23,9 @@ public:
     Vector3 BonePositions[MAX_STUDIO_BONES];
     std::pair<int, int> BonePairs[MAX_STUDIO_BONES];
     uint8_t CurrentBonePairs = 0;
-    
+
+    netvar::ClientClass get_class() const;
+
     //Vector3 getBonePosition(uint32_t boneId);
     Vector3 getAbsolutePosition();
     Vector3 getFeetPosition();

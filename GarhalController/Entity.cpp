@@ -7,6 +7,8 @@
 #include "csgo_settings.hpp"
 #include "offsets.hpp"
 #include "sdk.hpp"
+#include "memory.hpp"
+#include "./netvar.h"
 
 // hazedumper namespace
 using namespace hazedumper::netvars;
@@ -14,6 +16,16 @@ using namespace hazedumper::signatures;
 
 auto Entity::getLocalPlayer() -> Entity {
     return Entity{Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, ClientAddress + dwLocalPlayer)};
+}
+
+netvar::ClientClass Entity::get_class() const {
+    return netvar::ClientClass{
+            memory::dereference(this->EntityAddress,
+                                0x08, // IClientNetworkable vtable
+                                2 * 0x04, // GetClientClass
+                                0x01 // MOV EAX <ClientClass ptr>
+            )
+    };
 }
 
 bool Entity::IsDormant()

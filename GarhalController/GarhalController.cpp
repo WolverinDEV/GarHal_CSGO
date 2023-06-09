@@ -15,6 +15,7 @@
 #include "imgui_extensions.h"
 #include "utils.hpp"
 #include "./memory.hpp"
+#include "./netvar.h"
 
 // hazedumper namespace
 using namespace hazedumper::netvars;
@@ -113,9 +114,6 @@ std::array<const char*, 20> kRankNames{
 };
 
 class EntityList {
-        struct EntityListIterator;
-        friend struct EntityListIterator;
-
         struct EntityIterator {
             explicit EntityIterator() noexcept : index{0}, end_index{0} {}
             explicit EntityIterator(size_t index, size_t end_index) noexcept : index{index}, end_index{end_index} {}
@@ -158,18 +156,19 @@ class EntityList {
 
             [[nodiscard]]
             auto begin() const noexcept -> EntityIterator {
-                return EntityIterator(0, this->handle->entity_list_size);
+                return EntityIterator(0, this->handle->player_entity_list_size);
             }
 
             [[nodiscard]]
             auto end() const noexcept -> EntityIterator {
-                return EntityIterator(this->handle->entity_list_size, this->handle->entity_list_size);
+                return EntityIterator(this->handle->player_entity_list_size, this->handle->player_entity_list_size);
             }
 
             const EntityList* handle;
         };
     public:
-        size_t entity_list_size{64};
+    size_t entity_list_size{2048};
+    size_t player_entity_list_size{64};
 
         [[nodiscard]]
         auto get_from_handle(uint32_t handle) const -> std::optional<Entity> {
@@ -183,12 +182,12 @@ class EntityList {
 
         [[nodiscard]]
         auto get_from_index(uint32_t index) const -> std::optional<Entity> {
-            if(index > this->entity_list_size) {
+            if(index > this->player_entity_list_size) {
                 return std::nullopt;
             }
 
             Entity entity{
-        Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, ClientAddress + dwEntityList + index * 0x10)
+                Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, ClientAddress + dwEntityList + index * 0x10)
             };
             if(!entity.isValid()) {
                 return std::nullopt;
@@ -198,7 +197,7 @@ class EntityList {
         }
 
         auto get_entities(std::vector<Entity>& result) const -> bool {
-            for (size_t i{0}; i < this->entity_list_size; i++) {
+            for (size_t i{0}; i < this->player_entity_list_size; i++) {
                 Entity entity{
             Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, ClientAddress + dwEntityList + i * 0x10)
                 };
@@ -210,6 +209,27 @@ class EntityList {
             }
 
             return true;
+        }
+
+        [[nodiscard]]
+        auto find_entity_of_type(const netvar::ClientClass& klass) const -> std::optional<Entity> {
+            for (size_t i{0}; i < this->entity_list_size; i++) {
+                auto entity = std::make_optional<Entity>(
+                        Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, ClientAddress + dwEntityList + i * 0x10)
+                );
+
+                if(!entity->isValid()) {
+                    continue;
+                }
+
+                if(entity->get_class() != klass) {
+                    continue;
+                }
+
+                return entity;
+            }
+
+            return std::nullopt;
         }
 
         [[nodiscard]]
@@ -291,6 +311,7 @@ void PrintPlayerRanks() {
     auto PlayerResource = Driver->ReadVirtualMemory<uint32_t>(ProcessId, ClientAddress + dwPlayerResource, sizeof(uint32_t));
     player_info_t player_info;
 
+    std::cout << "Player resource " << std::hex << PlayerResource << "\n";
     for(auto entry : entity_list.iterate_entities()) {
         auto entry_index = entry.GetEntityIndex();
 
@@ -338,8 +359,40 @@ void SetupAddresses() {
     }
 }
 
+float scaleDamageArmor(float flDamage, int armor_value)
+{
+    float flArmorRatio = 0.5f;
+    float flArmorBonus = 0.5f;
+    if (armor_value > 0) {
+        float flNew = flDamage * flArmorRatio;
+        float flArmor = (flDamage - flNew) * flArmorBonus;
+
+        if (flArmor > static_cast<float>(armor_value)) {
+            flArmor = static_cast<float>(armor_value) * (1.f / flArmorBonus);
+            flNew = flDamage - flArmor;
+        }
+
+        flDamage = flNew;
+    }
+    return flDamage;
+}
+
+struct GlobalVars {
+    float real_time;
+    int frame_count;
+    float absolute_frame_time;
+    float absolute_frame_start_time_stddev;
+    float cur_time;
+    float frame_time;
+    int max_clients;
+    int tick_count;
+    float interval_per_tick;
+    float interpolation_amount;
+};
+
 int main(int argc, char* argv[], char* envp[])
 {
+    std::string error{};
 
     Driver = std::make_unique<KeInterface>(R"(\\.\garhalop)");
     if(!Driver->IsValid()) {
@@ -365,6 +418,11 @@ int main(int argc, char* argv[], char* envp[])
     std::cout << "ClientAddress: " << std::hex << ClientAddress << std::endl;
     std::cout << "EngineAddress: " << std::hex << EngineAddress << std::endl;
     std::cout << "ClientSize: " << std::hex << ClientSize << std::endl;
+    std::cout << "dwGetAllClasses: " << std::hex << (dwGetAllClasses) << std::endl;
+    if(!netvar::dump_all(error)) {
+        std::cout << "failed to dump net vars: " << error << "\n";
+        return 1;
+    }
 
     std::cout << "==== Config Values ====" << std::endl;
     std::cout << "AimbotState: " << static_cast<unsigned>(csgo_settings::AimbotState) << std::endl;
@@ -379,9 +437,45 @@ int main(int argc, char* argv[], char* envp[])
     std::cout << "TriggerBotDelay: " << std::boolalpha << csgo_settings::TriggerBotDelay << std::endl;
     std::cout << "Radar: " << std::boolalpha << csgo_settings::Radar << std::endl;
 
-    player_info_helper.initialize();
+    auto class_base_entity = netvar::find_class("CBaseEntity");
+    if(!class_base_entity.has_value()) {
+        std::cout << "Failed to find CBaseEntity\n";
+        return 1;
+    }
 
+    auto class_planted_c4 = netvar::find_class("CPlantedC4");
+    if(!class_planted_c4.has_value()) {
+        std::cout << "Failed to find CPlantedC4\n";
+        return 1;
+    }
+
+    if(true) {
+        for(size_t index{0}; index < 2048; index++) {
+            auto entity_address = Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, ClientAddress + dwEntityList + index * 0x10);
+            if(!entity_address) {
+                //std::cout << index << " no entity\n";
+                continue;
+            }
+
+            auto client_class_address = memory::dereference(entity_address,
+                0x08, // IClientNetworkable vtable
+                2 * 0x04, // GetClientClass
+                0x01 // MOV EAX <ClientClass ptr>
+            );
+
+            netvar::ClientClass client_class{client_class_address};
+
+            if(client_class.get_name().find("Bomb") == std::string::npos) {
+                //continue;
+            }
+            std::cout << std::dec << index << " (" << std::hex << entity_address << ")" << " client class ptr: " << std::hex << client_class.address << " (" << client_class.get_name() << ")" << "\n";
+        }
+        //return 0;
+    }
+
+    player_info_helper.initialize();
     PrintPlayerRanks();
+
 
     // Initialize our renderer
     CSGORender csgoRender;
@@ -404,6 +498,7 @@ int main(int argc, char* argv[], char* envp[])
     std::vector<RenderData> renderDatas;
     std::vector<ObserverEntry> observerEntries;
 
+    std::cout << "enter loop\n";
     while (true)
     {
         // Clear render datas
@@ -414,6 +509,54 @@ int main(int argc, char* argv[], char* envp[])
         {
             Sleep(500);
             continue;
+        }
+
+        auto bomb_entity = entity_list.find_entity_of_type(*class_planted_c4);
+        if(bomb_entity.has_value()) {
+            auto local_player = entities::CCSPlayer{ Entity::getLocalPlayer().GetEntityAddress() };
+            auto player_position = local_player.get_origin();
+
+            std::cout << "Have bomb entity:\n";
+            auto bomb = entities::CPlantedC4{ bomb_entity->GetEntityAddress() };
+            auto bomb_position = bomb.get_origin();
+            //std::cout << "  x: " << bomb_position.x << " y: " << bomb_position.y << " z: " << bomb_position.z << "\n";
+
+            auto distance = (bomb_position - player_position).magnitude();
+            std::cout << "Distance: " << distance << "\n";
+
+            {
+                const auto damagePercentage = 1.0f;
+
+                auto flDamage = 500.f; // 500 - default, if radius is not written on the map https://i.imgur.com/mUSaTHj.png
+                auto flBombRadius = flDamage * 3.5f;
+                auto fSigma = flBombRadius / 3.0f;
+                auto fGaussianFalloff = exp(-distance * distance / (2.0f * fSigma * fSigma));
+                auto flAdjustedDamage = flDamage * fGaussianFalloff * damagePercentage;
+
+                flAdjustedDamage = scaleDamageArmor(flAdjustedDamage, local_player.get_armor_value());
+
+                GlobalVars globals{};
+                (void) memory::read(EngineAddress + dwGlobalVars, globals);
+                auto bomb_blow = bomb.get_c4_blow();
+
+                std::cout << std::dec << "Damage: " << flAdjustedDamage << " Time: " << (bomb_blow - globals.cur_time) << " Armor: " << local_player.get_armor_value() << " Heavy: " << local_player.has_heavy_armor() << "\n";
+            }
+//#define READ_PROPERTY(name, type) \
+//do {                  \
+//    auto property = class_planted_c4->find_offset(name); \
+//    if(property.has_value()) { \
+//        auto value = memory::read<type>(bomb_entity->GetEntityAddress() + *property); \
+//        std::cout << "  " << name << ": " << std::hex << (uint32_t) value.value_or(0) << "\n"; \
+//    }                     \
+//} while(0)
+//            READ_PROPERTY("m_bBombTicking", uint8_t);
+//            READ_PROPERTY("m_nBombSite", uint8_t);
+//            READ_PROPERTY("m_flC4Blow", float);
+//            READ_PROPERTY("m_flTimerLength", float);
+//            READ_PROPERTY("m_flDefuseLength", float);
+//            READ_PROPERTY("m_flDefuseCountDown", float);
+//            READ_PROPERTY("m_bBombDefused", uint8_t);
+//            READ_PROPERTY("m_hBombDefuser", uint32_t);
         }
 
         // Ready to read, reserve a potentional amount in the memory.
