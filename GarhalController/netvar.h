@@ -78,10 +78,11 @@ namespace netvar {
         }
     }
 
-    #define DEFINE_NET_CLASS(name, size, parent) \
+    #define DEFINE_NET_CLASS(name, class_id, size, parent) \
     struct name : parent {                       \
     public:                              \
         constexpr static auto kClassSize{size}; \
+        constexpr static auto kClassId{class_id}; \
         explicit name(uint32_t address) noexcept : parent(address) {}; \
                                          \
         inline auto operator!=(const name& other) const -> bool { \
@@ -120,19 +121,34 @@ namespace netvar {
     }
 
 struct RecvTable;
-    DEFINE_NET_CLASS(RecvProp, 0x3C, netvar::class_base);
+    enum {
+        PROP_TYPE_INT = 0,
+        PROP_TYPE_FLOAT,
+        PROP_TYPE_VECTOR,
+        PROP_TYPE_VECTOR_XY,
+        PROP_TYPE_STRING,
+        PROP_TYPE_ARRAY,
+        PROP_TYPE_DATA_TABLE
+    };
+    constexpr static auto kClassIdNone = 0xFFFFFFFF;
+
+    DEFINE_NET_CLASS(RecvProp, kClassIdNone, 0x3C, netvar::class_base);
         NET_CLASS_VAR_S(get_offset, uint32_t, 0x2C);
         NET_CLASS_VAR_C(get_name, 0, 64);
+        NET_CLASS_VAR_S(get_recv_type, uint32_t, 0x04);
+        NET_CLASS_VAR_S(get_num_elements, int, 0x34);
+        NET_CLASS_VAR_S(get_element_stride, int, 0x30);
+        NET_CLASS_VAR_S(get_string_buffer_size, int, 0x0C);
         //NET_CLASS_VAR_R(get_data_table, RecvTable, 0x28);
     END_NET_CLASS(RecvProp);
 
-    DEFINE_NET_CLASS(RecvTable, 0x00, netvar::class_base);
+    DEFINE_NET_CLASS(RecvTable, kClassIdNone, 0x00, netvar::class_base);
         NET_CLASS_VAR_AP(get_property, RecvProp, 0x00);
         NET_CLASS_VAR_S(get_property_count, uint32_t, 0x04);
         NET_CLASS_VAR_C(get_name, 0x0C, 64);
     END_NET_CLASS(RecvTable);
 
-    DEFINE_NET_CLASS(ClientClass, 0x00, netvar::class_base);
+    DEFINE_NET_CLASS(ClientClass, kClassIdNone, 0x00, netvar::class_base);
         NET_CLASS_VAR_C(get_name, 0x08, 64);
         NET_CLASS_VAR_S(get_recv_table, RecvTable*, 0x0C);
         NET_CLASS_VAR_S(get_next_class, ClientClass*, 0x10);
@@ -145,26 +161,4 @@ struct RecvTable;
     extern bool dump_all(std::string& /* error */);
     extern ClientClass get_class_list_head();
     extern std::optional<ClientClass> find_class(const std::string_view& /* class name */);
-}
-
-namespace entities {
-    DEFINE_NET_CLASS(CBaseEntity, 0x00, netvar::class_base);
-        NET_CLASS_VAR_S(get_origin, Vector3f, 0x138);
-    END_NET_CLASS(CBaseEntity);
-
-    DEFINE_NET_CLASS(CCSPlayer, 0x00, CBaseEntity);
-        NET_CLASS_VAR_S(has_heavy_armor, bool, 0x117c1);
-        NET_CLASS_VAR_S(get_armor_value, int, 0x117cc);
-    END_NET_CLASS(CBaseEntity);
-
-    DEFINE_NET_CLASS(CPlantedC4, 0x00, CBaseEntity);
-        NET_CLASS_VAR_S(is_bomb_ticking, bool, 0x2990);
-        NET_CLASS_VAR_S(get_bomb_site, uint8_t, 0x2994);
-        NET_CLASS_VAR_S(get_c4_blow, float, 0x29a0);
-        NET_CLASS_VAR_S(get_timer_length, float, 0x29a4);
-        NET_CLASS_VAR_S(get_defuse_length, float, 0x29b8);
-        NET_CLASS_VAR_S(get_defuse_count_down, float, 0x29bc);
-        NET_CLASS_VAR_S(is_bomb_defused, bool, 0x29c0);
-        NET_CLASS_VAR_S(get_bomb_defuser, uint32_t, 0x29c4); // Attention: This is a client handle!
-    END_NET_CLASS(CPlantedC4);
 }

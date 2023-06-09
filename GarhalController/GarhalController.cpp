@@ -16,6 +16,7 @@
 #include "utils.hpp"
 #include "./memory.hpp"
 #include "./netvar.h"
+#include "./netvars.h"
 
 // hazedumper namespace
 using namespace hazedumper::netvars;
@@ -209,6 +210,28 @@ class EntityList {
             }
 
             return true;
+        }
+
+        template<typename T>
+        [[nodiscard]]
+        auto find_entity_of_type_t() const -> std::optional<T> {
+            for (size_t i{0}; i < this->entity_list_size; i++) {
+                auto entity = std::make_optional<Entity>(
+                        Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, ClientAddress + dwEntityList + i * 0x10)
+                );
+
+                if(!entity->isValid()) {
+                    continue;
+                }
+
+                auto klass = entity->get_class();
+
+                if(T::kClassId == klass.get_class_id()) {
+                    return std::make_optional<T>(entity->GetEntityAddress());
+                }
+            }
+
+            return std::nullopt;
         }
 
         [[nodiscard]]
@@ -511,14 +534,13 @@ int main(int argc, char* argv[], char* envp[])
             continue;
         }
 
-        auto bomb_entity = entity_list.find_entity_of_type(*class_planted_c4);
-        if(bomb_entity.has_value()) {
+        auto bomb = entity_list.find_entity_of_type_t<entities::CPlantedC4>();
+        if(bomb.has_value()) {
             auto local_player = entities::CCSPlayer{ Entity::getLocalPlayer().GetEntityAddress() };
             auto player_position = local_player.get_origin();
 
             std::cout << "Have bomb entity:\n";
-            auto bomb = entities::CPlantedC4{ bomb_entity->GetEntityAddress() };
-            auto bomb_position = bomb.get_origin();
+            auto bomb_position = bomb->get_origin();
             //std::cout << "  x: " << bomb_position.x << " y: " << bomb_position.y << " z: " << bomb_position.z << "\n";
 
             auto distance = (bomb_position - player_position).magnitude();
@@ -537,7 +559,7 @@ int main(int argc, char* argv[], char* envp[])
 
                 GlobalVars globals{};
                 (void) memory::read(EngineAddress + dwGlobalVars, globals);
-                auto bomb_blow = bomb.get_c4_blow();
+                auto bomb_blow = bomb->get_c4_blow();
 
                 std::cout << std::dec << "Damage: " << flAdjustedDamage << " Time: " << (bomb_blow - globals.cur_time) << " Armor: " << local_player.get_armor_value() << " Heavy: " << local_player.has_heavy_armor() << "\n";
             }
