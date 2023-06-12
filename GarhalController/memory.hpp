@@ -9,44 +9,40 @@
 #include <memory>
 
 extern std::unique_ptr<KeInterface> Driver;
-extern DWORD ProcessId;
+extern uint32_t ProcessId;
 
 // CSGO memory API
 namespace memory {
-    inline uint32_t dereference(uint32_t address);
+    template <size_t N>
+    using offsets_t = std::array<uint32_t, N>;
 
-    namespace internal {
-        template <typename T>
-        inline uint32_t dereference_unwrap(uint32_t address, uint32_t offset) {
-            if(!address) {
-                return 0;
-            }
+    template <typename T, size_t N>
+    [[nodiscard]]
+    inline bool dereferenced_read(uint32_t address, const offsets_t<N>& offsets, T& target) {
+        return Driver->ReadVirtualMemoryEx(ProcessId, address, offsets.data(), offsets.size(), &target, sizeof(T));
+    }
 
-            return ::memory::dereference(address + offset);
+    template <typename T, size_t N>
+    [[nodiscard]]
+    inline std::optional<T> dereferenced_read(uint32_t address, const offsets_t<N>& offsets) {
+        auto result = std::make_optional<T>();
+        if(!memory::dereferenced_read<T, N>(address, offsets, *result)) {
+            return std::nullopt;
         }
 
-        template <typename T, typename... Args>
-        inline uint32_t dereference_unwrap(uint32_t address, uint32_t offset, Args... offsets) {
-            auto dereferenced = dereference_unwrap<T>(address, offset);
-            return dereference_unwrap<Args...>(dereferenced, offsets...);
-        }
+        return result;
     }
 
     template <typename T>
     [[nodiscard]]
     inline bool read(uint32_t address, T& target) {
-        return Driver->ReadVirtualMemoryBuffer(ProcessId, address, &target, sizeof(T));
+        return memory::dereferenced_read<T, 0>(address, offsets_t<0>{}, target);
     }
 
     template <typename T>
     [[nodiscard]]
     inline std::optional<T> read(uint32_t address) {
-        auto result = std::make_optional<T>();
-        if(!memory::read<T>(address, *result)) {
-            return std::nullopt;
-        }
-
-        return result;
+        return memory::dereferenced_read<T, 0>(address, offsets_t<0>{});
     }
 
     [[nodiscard]]
@@ -54,7 +50,7 @@ namespace memory {
         auto result = std::make_optional<std::string>();
         result->resize(max_length);
 
-        if(!Driver->ReadVirtualMemoryBuffer(ProcessId, address, result->data(), result->length())) {
+        if(!Driver->ReadVirtualMemory(ProcessId, address, result->data(), result->length())) {
             return std::nullopt;
         }
 
@@ -67,12 +63,9 @@ namespace memory {
         return result;
     }
 
-    inline uint32_t dereference(uint32_t address) {
-        return memory::read<uint32_t>(address).value_or(0);
-    }
-
     template <typename... Args>
-    uint32_t dereference(uint32_t address, Args... offsets) {
-        return internal::dereference_unwrap<Args...>(address, offsets...);
+    inline uint32_t dereference(uint32_t address, Args... offset) {
+        offsets_t<sizeof...(Args)> offsets{((uint32_t) offset)...};
+        return memory::dereferenced_read<uint32_t>(address, offsets).value_or(0);
     }
 }

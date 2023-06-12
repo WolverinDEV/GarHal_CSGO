@@ -29,6 +29,8 @@
 // Order driver to apply full protection on RankReader
 #define IO_PROTECT_RANKREADER CTL_CODE(FILE_DEVICE_UNKNOWN, 0x0674 /* Our Custom Code */, METHOD_OUT_DIRECT, FILE_ANY_ACCESS)
 
+#define IO_FIND_ENTITIES_REQUEST CTL_CODE(FILE_DEVICE_UNKNOWN, 0x0675 /* Our Custom Code */, METHOD_BUFFERED, FILE_SPECIAL_ACCESS)
+
 // Declare the IoControl function.
 NTSTATUS IoControl(PDEVICE_OBJECT DeviceObject, PIRP Irp);
 
@@ -40,12 +42,20 @@ NTSTATUS CreateCall(PDEVICE_OBJECT DeviceObject, PIRP irp);
 // datatype for read request
 typedef struct _KERNEL_READ_REQUEST
 {
-	ULONG ProcessId;
+	ULONG process_id;
+	ULONG address;
 
-	ULONG Address;
-	PVOID pBuff;
-	ULONG Size;
+    // An offset added before reading the address.
+    // If more than one offset given, the calculated address will be dereferenced
+    // and the next offset will be added.
+    //
+    // An offset buffer of [ 0x04, 0x10, 0x08] will result in the following
+    // Read byte_count from *(*(address + 0x04) + 0x10) + 0x08.
+    PVOID offset_buffer;
+    size_t offset_count;
 
+    PVOID target_buffer;
+	ULONG byte_count;
 } KERNEL_READ_REQUEST, * PKERNEL_READ_REQUEST;
 
 typedef struct _KERNEL_WRITE_REQUEST
@@ -57,3 +67,15 @@ typedef struct _KERNEL_WRITE_REQUEST
 	ULONG Size;
 
 } KERNEL_WRITE_REQUEST, * PKERNEL_WRITE_REQUEST;
+
+
+typedef struct _KERNEL_FIND_ENTITIES_REQUEST
+{
+    ULONG process_id;
+    ULONG entity_table_address;
+    size_t entity_table_size;
+
+    /* Needs to hold at least entity_table_size uint32_t */
+    PVOID class_id_buffer;
+} KERNEL_FIND_ENTITIES_REQUEST, *PKERNEL_FIND_ENTITIES_REQUEST;
+

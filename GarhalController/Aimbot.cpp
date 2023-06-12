@@ -94,7 +94,9 @@ bool Aimbot::enemyIsInCrossHair()
 
     crossHairId -= 1;
 
-    uint32_t EntityAddr = Driver->ReadVirtualMemory<uint32_t>(ProcessId, ClientAddress + hazedumper::signatures::dwEntityList + 0x10 * crossHairId, sizeof(uint32_t));
+    uint32_t EntityAddr = Driver->ReadVirtualMemoryTV<uint32_t>(ProcessId,
+                                                                ClientAddress + hazedumper::signatures::dwEntityList +
+                                                                0x10 * crossHairId, sizeof(uint32_t));
 
     Entity target = Entity(EntityAddr);
 
@@ -121,7 +123,9 @@ Entity Aimbot::findClosestEnemyToFOV()
     float closest = FLT_MAX;
     for (int i = 0; i < 64; i++)
     {
-        uint32_t EntityAddr = Driver->ReadVirtualMemory<uint32_t>(ProcessId, ClientAddress + hazedumper::signatures::dwEntityList + i * 0x10, sizeof(uint32_t));
+        uint32_t EntityAddr = Driver->ReadVirtualMemoryTV<uint32_t>(ProcessId, ClientAddress +
+                                                                               hazedumper::signatures::dwEntityList +
+                                                                               i * 0x10, sizeof(uint32_t));
 
         if (EntityAddr == NULL)
         {
@@ -190,15 +194,21 @@ Entity Aimbot::findClosestEnemyToFOV()
 
 Vector3 Aimbot::getViewAngles()
 {
-    uint32_t clientState = Driver->ReadVirtualMemory<uint32_t>(ProcessId, EngineAddress + hazedumper::signatures::dwClientState, sizeof(uint32_t));
-	return Driver->ReadVirtualMemory<Vector3>(ProcessId, clientState + hazedumper::signatures::dwClientState_ViewAngles, sizeof(Vector3));
+    uint32_t clientState = Driver->ReadVirtualMemoryTV<uint32_t>(ProcessId,
+                                                                 EngineAddress + hazedumper::signatures::dwClientState,
+                                                                 sizeof(uint32_t));
+	return Driver->ReadVirtualMemoryTV<Vector3>(ProcessId,
+                                                clientState + hazedumper::signatures::dwClientState_ViewAngles,
+                                                sizeof(Vector3));
 }
 
 
 float Aimbot::getSensitivity()
 {
     uint32_t sensitivityPtr = ClientAddress + hazedumper::signatures::dwSensitivityPtr;
-    uint32_t sensitivity = Driver->ReadVirtualMemory<uint32_t>(ProcessId, ClientAddress + hazedumper::signatures::dwSensitivity, sizeof(uint32_t));
+    uint32_t sensitivity = Driver->ReadVirtualMemoryTV<uint32_t>(ProcessId,
+                                                                 ClientAddress + hazedumper::signatures::dwSensitivity,
+                                                                 sizeof(uint32_t));
 
     sensitivity ^= sensitivityPtr;
 
@@ -209,20 +219,30 @@ float Aimbot::getSensitivity()
 
 const char* Aimbot::getMapDirectory()
 {
-    uint32_t clientState = Driver->ReadVirtualMemory<uint32_t>(ProcessId, EngineAddress + hazedumper::signatures::dwClientState, sizeof(uint32_t));
-    static std::array<char, 0x120> mapDirectory = Driver->ReadVirtualMemory<std::array<char, 0x120>>(ProcessId, clientState + hazedumper::signatures::dwClientState_MapDirectory, sizeof(std::array<char, 0x120>));
+    uint32_t clientState = Driver->ReadVirtualMemoryTV<uint32_t>(ProcessId,
+                                                                 EngineAddress + hazedumper::signatures::dwClientState,
+                                                                 sizeof(uint32_t));
+    static std::array<char, 0x120> mapDirectory = Driver->ReadVirtualMemoryTV<std::array<char, 0x120>>(ProcessId,
+                                                                                                       clientState +
+                                                                                                       hazedumper::signatures::dwClientState_MapDirectory,
+                                                                                                       sizeof(std::array<char, 0x120>));
     return mapDirectory.data();
 }
 
 const char* Aimbot::getGameDirectory()
 {
-    static std::array<char, 0x120> gameDirectory = Driver->ReadVirtualMemory<std::array<char, 0x120>>(ProcessId, EngineAddress + hazedumper::signatures::dwGameDir, sizeof(std::array<char, 0x120>));
+    static std::array<char, 0x120> gameDirectory = Driver->ReadVirtualMemoryTV<std::array<char, 0x120>>(ProcessId,
+                                                                                                        EngineAddress +
+                                                                                                        hazedumper::signatures::dwGameDir,
+                                                                                                        sizeof(std::array<char, 0x120>));
     return gameDirectory.data();
 }
 
 void Aimbot::setViewAngles(Vector3& viewAngles)
 {
-    uint32_t clientState = Driver->ReadVirtualMemory<uint32_t>(ProcessId, EngineAddress + hazedumper::signatures::dwClientState, sizeof(uint32_t));
+    uint32_t clientState = Driver->ReadVirtualMemoryTV<uint32_t>(ProcessId,
+                                                                 EngineAddress + hazedumper::signatures::dwClientState,
+                                                                 sizeof(uint32_t));
     Driver->WriteVirtualMemory(ProcessId, clientState + hazedumper::signatures::dwClientState_ViewAngles, viewAngles, sizeof(viewAngles));
 }
 
@@ -254,7 +274,9 @@ bool Aimbot::EnemyIsInCrossHair()
     }
 
     CrosshairID -= 1;
-    uint32_t crosshairentity = Driver->ReadVirtualMemory<uint32_t>(ProcessId, ClientAddress + hazedumper::signatures::dwEntityList + 0x10 * CrosshairID, sizeof(uint32_t));
+    uint32_t crosshairentity = Driver->ReadVirtualMemoryTV<uint32_t>(ProcessId, ClientAddress +
+                                                                                hazedumper::signatures::dwEntityList +
+                                                                                0x10 * CrosshairID, sizeof(uint32_t));
 	if (crosshairentity == NULL)
 	{
         return false;

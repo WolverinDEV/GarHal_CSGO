@@ -78,7 +78,7 @@ namespace hazedumper
             int32_t m_Filelen; /// 0x4
             int32_t m_Version; /// 0x8
             array<char, 4> m_FourCC; /// 0xC
-        }; ///Size=0x10
+        }; ///byte_count=0x10
 
         class dheader_t
         {
@@ -87,7 +87,7 @@ namespace hazedumper
             int32_t m_Version; /// 0x004
             array<lump_t, HEADER_LUMPS> m_Lumps; /// 0x008
             int32_t m_MapRevision; /// 0x408
-        }; ///Size=0x40C
+        }; ///byte_count=0x40C
 
         class dplane_t
         {
@@ -95,7 +95,7 @@ namespace hazedumper
             Vector3 m_Normal; /// 0x00
             float m_Distance; /// 0x0C
             int32_t m_Type; /// 0x10
-        }; ///Size=0x14
+        }; ///byte_count=0x14
 
         class cplane_t
         {
@@ -106,19 +106,19 @@ namespace hazedumper
             uint8_t m_SignBits; /// 0x11
         private:
             uint8_t m_Pad[0x2]; /// 0x12
-        }; ///Size=0x14
+        }; ///byte_count=0x14
 
         class dedge_t
         {
         public:
             array<uint16_t, 2> m_V; /// 0x0
-        }; ///Size=0x4
+        }; ///byte_count=0x4
 
         class mvertex_t
         {
         public:
             Vector3 m_Position; /// 0x0
-        }; ///Size=0xC
+        }; ///byte_count=0xC
 
         class dleaf_t
         {
@@ -134,7 +134,7 @@ namespace hazedumper
             uint16_t m_Firstleafbrush; /// 0x2A
             uint16_t m_Numleafbrushes; /// 0x2C
             int16_t m_LeafWaterDataID; /// 0x2E
-        }; ///Size=0x30
+        }; ///byte_count=0x30
 
         class dnode_t
         {
@@ -148,7 +148,7 @@ namespace hazedumper
             int16_t m_Area; /// 0x1C
         private:
             uint8_t m_Pad[0x2]; /// 0x1E
-        }; ///Size=0x20
+        }; ///byte_count=0x20
 
         class snode_t
         {
@@ -164,7 +164,7 @@ namespace hazedumper
             uint16_t m_Numfaces; /// 0x26
             int16_t m_Area; /// 0x28
             uint8_t m_Pad[0x2]; /// 0x2A
-        }; ///Size=0x2C
+        }; ///byte_count=0x2C
 
         class dface_t
         {
@@ -186,7 +186,7 @@ namespace hazedumper
             uint16_t m_NumPrims; /// 0x34
             uint16_t m_FirstPrimID; /// 0x36
             uint16_t m_SmoothingGroups; /// 0x38
-        }; ///Size=0x3A
+        }; ///byte_count=0x3A
 
         class dbrush_t
         {
@@ -194,7 +194,7 @@ namespace hazedumper
             int32_t m_Firstside; /// 0x0
             int32_t m_Numsides; /// 0x4
             int32_t m_Contents; /// 0x8
-        }; ///Size=0xC
+        }; ///byte_count=0xC
 
         class dbrushside_t
         {
@@ -204,7 +204,7 @@ namespace hazedumper
             int16_t m_Dispinfo; /// 0x4
             uint8_t m_Bevel; /// 0x6
             uint8_t m_Thin; /// 0x7
-        }; ///Size=0x8
+        }; ///byte_count=0x8
 
         class texinfo_t
         {
@@ -213,7 +213,7 @@ namespace hazedumper
             array<array<float, 4>, 2> m_LightmapVecs; /// 0x20
             int32_t m_Flags; /// 0x40
             int32_t m_Texdata; /// 0x44
-        }; ///Size=0x48
+        }; ///byte_count=0x48
 
         class VPlane
         {

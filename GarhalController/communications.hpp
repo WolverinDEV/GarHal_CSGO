@@ -31,14 +31,18 @@
 // Order driver to apply full protection on RankReader
 #define IO_PROTECT_RANKREADER CTL_CODE(FILE_DEVICE_UNKNOWN, 0x0674 /* Our Custom Code */, METHOD_OUT_DIRECT, FILE_ANY_ACCESS)
 
+#define IO_FIND_ENTITIES_REQUEST CTL_CODE(FILE_DEVICE_UNKNOWN, 0x0675 /* Our Custom Code */, METHOD_BUFFERED, FILE_SPECIAL_ACCESS)
 
 typedef struct _KERNEL_READ_REQUEST
 {
-	ULONG ProcessId;
+    ULONG process_id;
+    ULONG address;
 
-	ULONG Address;
-	PVOID pBuff;
-	ULONG Size;
+    const UINT* offset_buffer;
+    size_t offset_count;
+
+    PVOID target_buffer;
+    ULONG byte_count;
 
 } KERNEL_READ_REQUEST, * PKERNEL_READ_REQUEST;
 
@@ -72,3 +76,13 @@ typedef struct _RTL_PROCESS_MODULES
 	ULONG NumberOfModules;
 	RTL_PROCESS_MODULE_INFORMATION Modules[1];
 } RTL_PROCESS_MODULES, * PRTL_PROCESS_MODULES;
+
+typedef struct _KERNEL_FIND_ENTITIES_REQUEST
+{
+    ULONG process_id;
+    ULONG entity_table_address;
+    size_t entity_table_size;
+
+    /* Needs to hold at least entity_table_size uint32_t */
+    PVOID class_id_buffer;
+} KERNEL_FIND_ENTITIES_REQUEST, *PKERNEL_FIND_ENTITIES_REQUEST;

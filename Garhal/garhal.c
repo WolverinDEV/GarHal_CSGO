@@ -11,7 +11,7 @@
 NTSTATUS UnloadDriver(PDRIVER_OBJECT pDriverObject)
 {
 	DebugMessageNormal("======================================\n");
-	DebugMessageNormal("Garhal CSGO External hack By DreTaX\n");
+	DebugMessageNormal("Garhal CSGO External hack by DreTaX and WolverinDEV\n");
 	DebugMessageNormal("Shutting down...\n");
 
 	if (!IsManualMapped) 
@@ -42,7 +42,7 @@ NTSTATUS UnloadDriver(PDRIVER_OBJECT pDriverObject)
 NTSTATUS DriverEntry(PDRIVER_OBJECT pDriverObject, PUNICODE_STRING pRegistryPath)
 {
 	DebugMessageNormal("======================================\n");
-	DebugMessageNormal("Garhal CSGO External hack By DreTaX\n");
+	DebugMessageNormal("Garhal CSGO External hack By DreTaX and WolverinDEV\n");
 	DebugMessageNormal("Starting...\n");
 
 	if (!IsManualMapped) 

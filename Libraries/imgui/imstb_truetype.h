@@ -162,7 +162,7 @@
 //         The vertical qualities of the font, used to vertically position
 //         and space the characters. See docs for stbtt_GetFontVMetrics.
 //
-//      Font Size in Pixels or Points
+//      Font byte_count in Pixels or Points
 //         The preferred interface for specifying font sizes in stb_truetype
 //         is to specify how tall the font's vertical extent should be in pixels.
 //         If that sounds good enough, skip the next paragraph.

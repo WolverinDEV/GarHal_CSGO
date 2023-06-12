@@ -15,7 +15,7 @@ using namespace hazedumper::netvars;
 using namespace hazedumper::signatures;
 
 auto Entity::getLocalPlayer() -> Entity {
-    return Entity{Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, ClientAddress + dwLocalPlayer)};
+    return Entity{memory::read<uint32_t>(ClientAddress + dwLocalPlayer).value_or(0)};
 }
 
 netvar::ClientClass Entity::get_class() const {
@@ -30,13 +30,13 @@ netvar::ClientClass Entity::get_class() const {
 
 bool Entity::IsDormant()
 {
-    bool isDormant = Driver->ReadVirtualMemory<bool>(ProcessId, EntityAddress + m_bDormant, sizeof(uint8_t));
+    bool isDormant = Driver->ReadVirtualMemoryTV<bool>(ProcessId, EntityAddress + m_bDormant, sizeof(uint8_t));
     return isDormant;
 }
 
 bool Entity::IsDefusing()
 {
-    bool Defusing = Driver->ReadVirtualMemory<bool>(ProcessId, EntityAddress + m_bIsDefusing, sizeof(uint8_t));
+    bool Defusing = Driver->ReadVirtualMemoryTV<bool>(ProcessId, EntityAddress + m_bIsDefusing, sizeof(uint8_t));
     return Defusing;
 }
 
@@ -48,7 +48,7 @@ void Entity::SetFlashAlpha(float num)
 
 uint8_t Entity::getTeam()
 {
-    uint8_t OurTeam = Driver->ReadVirtualMemory<uint8_t>(ProcessId, EntityAddress + m_iTeamNum, sizeof(uint8_t));
+    uint8_t OurTeam = Driver->ReadVirtualMemoryTV<uint8_t>(ProcessId, EntityAddress + m_iTeamNum, sizeof(uint8_t));
     return OurTeam;
 }
 
@@ -62,19 +62,19 @@ uint32_t Entity::getObserverMode() {
 
 bool Entity::isInAir()
 {
-    uint32_t flags = Driver->ReadVirtualMemory<uint32_t>(ProcessId, EntityAddress + m_fFlags, sizeof(uint32_t));
+    uint32_t flags = Driver->ReadVirtualMemoryTV<uint32_t>(ProcessId, EntityAddress + m_fFlags, sizeof(uint32_t));
     return flags == 256 || flags == 258 || flags == 260 || flags == 262;
 }
 
 bool Entity::IsCrouching()
 {
-    uint32_t flags = Driver->ReadVirtualMemory<uint32_t>(ProcessId, EntityAddress + m_fFlags, sizeof(uint32_t));
+    uint32_t flags = Driver->ReadVirtualMemoryTV<uint32_t>(ProcessId, EntityAddress + m_fFlags, sizeof(uint32_t));
     return flags & FL_DUCKING;
 }
 
 uint8_t Entity::getHealth()
 {
-    uint8_t health = Driver->ReadVirtualMemory<uint8_t>(ProcessId, EntityAddress + m_iHealth, sizeof(uint8_t));
+    uint8_t health = Driver->ReadVirtualMemoryTV<uint8_t>(ProcessId, EntityAddress + m_iHealth, sizeof(uint8_t));
     return health;
 }
 
@@ -108,77 +108,87 @@ bool Entity::isValidPlayer()
 Vector3 Entity::getAbsolutePosition()
 {
     Vector3 position = getFeetPosition();
-    //position(2) += Driver->ReadVirtualMemory<float>(ProcessId, EntityAddress + 0x10c, sizeof(float));
+    //position(2) += Driver->ReadVirtualMemoryTV<float>(process_id, EntityAddress + 0x10c, sizeof(float));
     return position;
 }
 
 Vector3 Entity::getFeetPosition()
 {
-    Vector3 position = Driver->ReadVirtualMemory<Vector3>(ProcessId, EntityAddress + m_vecOrigin, sizeof(Vector3));
+    Vector3 position = Driver->ReadVirtualMemoryTV<Vector3>(ProcessId, EntityAddress + m_vecOrigin, sizeof(Vector3));
     return position;
 }
 
 Vector3 Entity::getAimPunch()
 {
-    Vector3 aimPunch = Driver->ReadVirtualMemory<Vector3>(ProcessId, EntityAddress + m_aimPunchAngle, sizeof(Vector3));
+    Vector3 aimPunch = Driver->ReadVirtualMemoryTV<Vector3>(ProcessId, EntityAddress + m_aimPunchAngle, sizeof(Vector3));
     return aimPunch;
 }
 
 Vector3 Entity::getVelocity()
 {
-    Vector3 vel = Driver->ReadVirtualMemory<Vector3>(ProcessId, EntityAddress + m_vecVelocity, sizeof(Vector3));
+    Vector3 vel = Driver->ReadVirtualMemoryTV<Vector3>(ProcessId, EntityAddress + m_vecVelocity, sizeof(Vector3));
     return vel;
 }
 
 /*Vector3 Entity::getBonePosition(uint32_t boneId)
 {
-	int boneBase = Driver->ReadVirtualMemory<int>(ProcessId, EntityAddress + m_dwBoneMatrix, sizeof(int));
+	int boneBase = Driver->ReadVirtualMemory<int>(process_id, EntityAddress + m_dwBoneMatrix, sizeof(int));
 
 	Vector3 bonePosition;
-	bonePosition(0) = Driver->ReadVirtualMemory<float>(ProcessId, boneBase + 0x30 * boneId + 0x0C, sizeof(float));
-	bonePosition(1) = Driver->ReadVirtualMemory<float>(ProcessId, boneBase + 0x30 * boneId + 0x1C, sizeof(float));
-	bonePosition(2) = Driver->ReadVirtualMemory<float>(ProcessId, boneBase + 0x30 * boneId + 0x2C, sizeof(float));
+	bonePosition(0) = Driver->ReadVirtualMemory<float>(process_id, boneBase + 0x30 * boneId + 0x0C, sizeof(float));
+	bonePosition(1) = Driver->ReadVirtualMemory<float>(process_id, boneBase + 0x30 * boneId + 0x1C, sizeof(float));
+	bonePosition(2) = Driver->ReadVirtualMemoryTV<float>(process_id, boneBase + 0x30 * boneId + 0x2C, sizeof(float));
 
 	return bonePosition;
 }*/
 
 Vector3 Entity::GetBonePosition(uint32_t targetBone)
 {
-    uint32_t boneMatrixAddress = Driver->ReadVirtualMemory<uint32_t>(ProcessId, EntityAddress + m_dwBoneMatrix, sizeof(uint32_t));
-    BoneMatrix boneMatrix = Driver->ReadVirtualMemory<BoneMatrix>(
-        ProcessId, boneMatrixAddress + sizeof(BoneMatrix) * targetBone, sizeof(BoneMatrix));
+    uint32_t boneMatrixAddress = Driver->ReadVirtualMemoryTV<uint32_t>(ProcessId, EntityAddress + m_dwBoneMatrix,
+                                                                       sizeof(uint32_t));
+    BoneMatrix boneMatrix = Driver->ReadVirtualMemoryTV<BoneMatrix>(
+            ProcessId, boneMatrixAddress + sizeof(BoneMatrix) * targetBone, sizeof(BoneMatrix));
     return Vector3(boneMatrix.x, boneMatrix.y, boneMatrix.z);
 }
 
 void Entity::BuildBonePairs()
 {
     // Update StudioHdr
-    uint32_t studioHdr = Driver->ReadVirtualMemory<uint32_t>(ProcessId, EntityAddress + m_pStudioHdr, sizeof(uint32_t));
-    StudioHdrAddress = Driver->ReadVirtualMemory<uint32_t>(ProcessId, studioHdr, sizeof(uint32_t));
-    StudioHdrSt = Driver->ReadVirtualMemory<StudioHdr>(ProcessId, StudioHdrAddress, sizeof(StudioHdr));
+    uint32_t studioHdr = Driver->ReadVirtualMemoryTV<uint32_t>(ProcessId, EntityAddress + m_pStudioHdr,
+                                                               sizeof(uint32_t));
+    StudioHdrAddress = Driver->ReadVirtualMemoryTV<uint32_t>(ProcessId, studioHdr, sizeof(uint32_t));
+    StudioHdrSt = Driver->ReadVirtualMemoryTV<StudioHdr>(ProcessId, StudioHdrAddress, sizeof(StudioHdr));
     
     // Update and collect hitboxes
-    StudioHitBoxSet = Driver->ReadVirtualMemory<StudioHitboxSet>(ProcessId, StudioHdrAddress + StudioHdrSt.hitboxsetindex, sizeof(StudioHitboxSet));
+    StudioHitBoxSet = Driver->ReadVirtualMemoryTV<StudioHitboxSet>(ProcessId,
+                                                                   StudioHdrAddress + StudioHdrSt.hitboxsetindex,
+                                                                   sizeof(StudioHitboxSet));
 
     for (size_t i = 0; i < StudioHitBoxSet.numhitboxes; ++i)
     {
-        StudioHitBoxes[i] = Driver->ReadVirtualMemory<StudioBBox>(ProcessId, StudioHdrAddress + StudioHdrSt.hitboxsetindex
-            + StudioHitBoxSet.hitboxindex + i * sizeof(StudioBBox), sizeof(StudioBBox));
+        StudioHitBoxes[i] = Driver->ReadVirtualMemoryTV<StudioBBox>(ProcessId,
+                                                                    StudioHdrAddress + StudioHdrSt.hitboxsetindex
+                                                                    + StudioHitBoxSet.hitboxindex +
+                                                                    i * sizeof(StudioBBox), sizeof(StudioBBox));
     }
 
     // Collect all StudioBones
     for (size_t i = 0; i < StudioHdrSt.numbones; ++i)
     {
-        StudioBones[i] = Driver->ReadVirtualMemory<StudioBone>(ProcessId, StudioHdrAddress + StudioHdrSt.boneindex + i * sizeof(StudioBone), sizeof(StudioBone));
+        StudioBones[i] = Driver->ReadVirtualMemoryTV<StudioBone>(ProcessId, StudioHdrAddress + StudioHdrSt.boneindex +
+                                                                            i * sizeof(StudioBone), sizeof(StudioBone));
     }
 
     // Collect all bone positions
-    uint32_t boneMatrixAddress = Driver->ReadVirtualMemory<uint32_t>(ProcessId, EntityAddress + m_dwBoneMatrix, sizeof(uint32_t));
+    uint32_t boneMatrixAddress = Driver->ReadVirtualMemoryTV<uint32_t>(ProcessId, EntityAddress + m_dwBoneMatrix,
+                                                                       sizeof(uint32_t));
     const int size = *(&BonePositions + 1) - BonePositions;
     
     for (size_t i = 0; i < size; ++i)
     {
-        BoneMatrix boneMatrix = Driver->ReadVirtualMemory<BoneMatrix>(ProcessId, boneMatrixAddress + sizeof(BoneMatrix) * i, sizeof(BoneMatrix));
+        BoneMatrix boneMatrix = Driver->ReadVirtualMemoryTV<BoneMatrix>(ProcessId,
+                                                                        boneMatrixAddress + sizeof(BoneMatrix) * i,
+                                                                        sizeof(BoneMatrix));
         BonePositions[i] = Vector3(boneMatrix.x, boneMatrix.y, boneMatrix.z);
     }
 
@@ -200,8 +210,9 @@ void Entity::BuildBonePairs()
 
 Vector3 Entity::getHeadPosition()
 {
-    Vector3 Origin = Driver->ReadVirtualMemory<Vector3>(ProcessId, EntityAddress + m_vecOrigin, sizeof(Vector3));
-    Vector3 ViewOffset = Driver->ReadVirtualMemory<Vector3>(ProcessId, EntityAddress + m_vecViewOffset, sizeof(Vector3));
+    Vector3 Origin = Driver->ReadVirtualMemoryTV<Vector3>(ProcessId, EntityAddress + m_vecOrigin, sizeof(Vector3));
+    Vector3 ViewOffset = Driver->ReadVirtualMemoryTV<Vector3>(ProcessId, EntityAddress + m_vecViewOffset,
+                                                              sizeof(Vector3));
     Vector3 LocalEyeOrigin = Origin + ViewOffset;
     if (this->IsCrouching())
     {
@@ -213,12 +224,12 @@ Vector3 Entity::getHeadPosition()
 
 uint16_t Entity::getCrosshairId()
 {
-    return Driver->ReadVirtualMemory<uint16_t>(ProcessId, EntityAddress + m_iCrosshairId, sizeof(uint16_t));
+    return Driver->ReadVirtualMemoryTV<uint16_t>(ProcessId, EntityAddress + m_iCrosshairId, sizeof(uint16_t));
 }
 
 uint8_t Entity::getForceAttack()
 {
-    return Driver->ReadVirtualMemory<uint8_t>(ProcessId, EntityAddress + dwForceAttack, sizeof(uint8_t));
+    return Driver->ReadVirtualMemoryTV<uint8_t>(ProcessId, EntityAddress + dwForceAttack, sizeof(uint8_t));
 }
 
 void Entity::setForceAttack(uint8_t value)
@@ -257,7 +268,7 @@ void Entity::shoot()
 
 uint16_t Entity::getShotsFired()
 {
-    return Driver->ReadVirtualMemory<uint16_t>(ProcessId, EntityAddress + m_iShotsFired, sizeof(uint16_t));
+    return Driver->ReadVirtualMemoryTV<uint16_t>(ProcessId, EntityAddress + m_iShotsFired, sizeof(uint16_t));
 }
 
 uint32_t Entity::GetEntityAddress()
@@ -266,18 +277,19 @@ uint32_t Entity::GetEntityAddress()
 }
 
 uint32_t Entity::GetEntityIndex() {
-    return Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, EntityAddress + 0x64) - 1;
+    return Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, EntityAddress + 0x64);
 }
 
 uint32_t Entity::GetGlowIndex()
 {
-    uint32_t GlowIndex = Driver->ReadVirtualMemory<uint32_t>(ProcessId, EntityAddress + m_iGlowIndex, sizeof(uint32_t));
+    uint32_t GlowIndex = Driver->ReadVirtualMemoryTV<uint32_t>(ProcessId, EntityAddress + m_iGlowIndex,
+                                                               sizeof(uint32_t));
     return GlowIndex;
 }
 
 DWORD Entity::GetWeaponHandle()
 {
-    return Driver->ReadVirtualMemory<DWORD>(ProcessId, EntityAddress + m_hActiveWeapon, sizeof(DWORD));
+    return Driver->ReadVirtualMemoryTV<DWORD>(ProcessId, EntityAddress + m_hActiveWeapon, sizeof(DWORD));
 }
 
 uint16_t Entity::GetWeaponIndex()
@@ -287,13 +299,14 @@ uint16_t Entity::GetWeaponIndex()
 
 DWORD Entity::GetCurrentWeapon()
 {
-    return Driver->ReadVirtualMemory<DWORD>(ProcessId, ClientAddress + dwEntityList + (GetWeaponIndex() - 1) * 0x10,
-                                           sizeof(DWORD));
+    return Driver->ReadVirtualMemoryTV<DWORD>(ProcessId, ClientAddress + dwEntityList + (GetWeaponIndex() - 1) * 0x10,
+                                              sizeof(DWORD));
 }
 
 uint16_t Entity::GetCurrentWeaponID()
 {
-    return Driver->ReadVirtualMemory<uint16_t>(ProcessId, GetCurrentWeapon() + m_iItemDefinitionIndex, sizeof(uint16_t));
+    return Driver->ReadVirtualMemoryTV<uint16_t>(ProcessId, GetCurrentWeapon() + m_iItemDefinitionIndex,
+                                                 sizeof(uint16_t));
 }
 
 void Entity::SetCorrectGlowStruct(uint8_t OurTeam, uint32_t GlowObject)
@@ -302,8 +315,8 @@ void Entity::SetCorrectGlowStruct(uint8_t OurTeam, uint32_t GlowObject)
     bool Defusing = this->IsDefusing();
 
     GlowStruct EGlow;
-    EGlow = Driver->ReadVirtualMemory<GlowStruct>(ProcessId, GlowObject + (this->GetGlowIndex() * 0x38) + 0x4,
-                                                 sizeof(GlowStruct));
+    EGlow = Driver->ReadVirtualMemoryTV<GlowStruct>(ProcessId, GlowObject + (this->GetGlowIndex() * 0x38) + 0x4,
+                                                    sizeof(GlowStruct));
     EGlow.alpha = 0.5f;
     EGlow.renderWhenOccluded = true;
     EGlow.renderWhenUnOccluded = false;

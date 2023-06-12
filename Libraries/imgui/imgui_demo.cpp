@@ -1002,7 +1002,7 @@ static void ShowDemoWindowWidgets()
         {
             ImGui::PushID(i);
             int frame_padding = -1 + i;                             // -1 == uses default padding (style.FramePadding)
-            ImVec2 size = ImVec2(32.0f, 32.0f);                     // Size of the image we want to make visible
+            ImVec2 size = ImVec2(32.0f, 32.0f);                     // byte_count of the image we want to make visible
             ImVec2 uv0 = ImVec2(0.0f, 0.0f);                        // UV coordinates for lower-left
             ImVec2 uv1 = ImVec2(32.0f / my_tex_w, 32.0f / my_tex_h);// UV coordinates for (32,32) in our texture
             ImVec4 bg_col = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);         // Black background
@@ -1414,7 +1414,7 @@ static void ShowDemoWindowWidgets()
             if (my_str.empty())
                 my_str.push_back(0);
             Funcs::MyInputTextMultiline("##MyStr", &my_str, ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 16));
-            ImGui::Text("Data: %p\nSize: %d\nCapacity: %d", (void*)my_str.begin(), my_str.size(), my_str.capacity());
+            ImGui::Text("Data: %p\nbyte_count: %d\nCapacity: %d", (void*)my_str.begin(), my_str.size(), my_str.capacity());
             ImGui::TreePop();
         }
 
@@ -4562,7 +4562,7 @@ static void ShowDemoWindowTables()
         {
             // The first column will use the default _WidthStretch when ScrollX is Off and _WidthFixed when ScrollX is On
             ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_NoHide);
-            ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, TEXT_BASE_WIDTH * 12.0f);
+            ImGui::TableSetupColumn("byte_count", ImGuiTableColumnFlags_WidthFixed, TEXT_BASE_WIDTH * 12.0f);
             ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, TEXT_BASE_WIDTH * 18.0f);
             ImGui::TableHeadersRow();
 
@@ -5151,7 +5151,7 @@ static void ShowDemoWindowTables()
 #else
             // Without clipper
             {
-                for (int row_n = 0; row_n < items.Size; row_n++)
+                for (int row_n = 0; row_n < items.byte_count; row_n++)
 #endif
                 {
                     MyItem* item = &items[row_n];
@@ -6202,7 +6202,7 @@ struct ExampleAppConsole
     ImVector<char*>       Items;
     ImVector<const char*> Commands;
     ImVector<char*>       History;
-    int                   HistoryPos;    // -1: new line, 0..History.Size-1 browsing history.
+    int                   HistoryPos;    // -1: new line, 0..History.byte_count-1 browsing history.
     ImGuiTextFilter       Filter;
     bool                  AutoScroll;
     bool                  ScrollToBottom;
@@ -6320,10 +6320,10 @@ struct ExampleAppConsole
         // to only process visible items. The clipper will automatically measure the height of your first item and then
         // "seek" to display only items in the visible area.
         // To use the clipper we can replace your standard loop:
-        //      for (int i = 0; i < Items.Size; i++)
+        //      for (int i = 0; i < Items.byte_count; i++)
         //   With:
         //      ImGuiListClipper clipper;
-        //      clipper.Begin(Items.Size);
+        //      clipper.Begin(Items.byte_count);
         //      while (clipper.Step())
         //         for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
         // - That your items are evenly spaced (same height)
@@ -7169,7 +7169,7 @@ static void ShowExampleAppCustomRendering(bool* p_open)
             static bool curve_segments_override = false;
             static int curve_segments_override_v = 8;
             static ImVec4 colf = ImVec4(1.0f, 1.0f, 0.4f, 1.0f);
-            ImGui::DragFloat("Size", &sz, 0.2f, 2.0f, 100.0f, "%.0f");
+            ImGui::DragFloat("byte_count", &sz, 0.2f, 2.0f, 100.0f, "%.0f");
             ImGui::DragFloat("Thickness", &thickness, 0.05f, 1.0f, 8.0f, "%.02f");
             ImGui::SliderInt("N-gon sides", &ngon_sides, 3, 12);
             ImGui::Checkbox("##circlesegmentoverride", &circle_segments_override);

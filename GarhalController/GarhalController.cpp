@@ -17,6 +17,7 @@
 #include "./netvar.h"
 #include "./netvars.h"
 #include "./overlay.h"
+#include <chrono>
 
 // hazedumper namespace
 using namespace hazedumper::netvars;
@@ -24,7 +25,7 @@ using namespace hazedumper::signatures;
 
 // Declarations
 inline Aimbot aim;
-DWORD ProcessId, ClientAddress, ClientSize, EngineAddress, EngineSize;
+uint32_t ProcessId, ClientAddress, ClientSize, EngineAddress, EngineSize;
 std::unique_ptr<KeInterface> Driver{nullptr};
 
 [[noreturn]]
@@ -49,7 +50,7 @@ void TriggerBotThread()
             continue;
         }
 
-        //uint32_t LocalPlayer = Driver->ReadVirtualMemory<uint32_t>(ProcessId, ClientAddress + dwLocalPlayer, sizeof(uint32_t));
+        //uint32_t LocalPlayer = Driver->ReadVirtualMemoryTV<uint32_t>(process_id, ClientAddress + dwLocalPlayer, sizeof(uint32_t));
         Entity LocalPlayerEnt = aim.localPlayer;
 
         if (csgo_settings::TriggerBotKey == 0 || ImGui::IsCustomKeyPressed(csgo_settings::TriggerBotKey, true))
@@ -168,8 +169,14 @@ class EntityList {
             const EntityList* handle;
         };
     public:
-    size_t entity_list_size{2048};
-    size_t player_entity_list_size{64};
+        size_t entity_list_size{2048};
+        size_t player_entity_list_size{64};
+
+        std::array<uint32_t, 2048> class_ids{};
+
+        void cache_entities() {
+            (void) Driver->ReadEntityTableClasses(ProcessId, ClientAddress + dwEntityList, this->class_ids);
+        }
 
         [[nodiscard]]
         auto get_from_handle(uint32_t handle) const -> std::optional<Entity> {
@@ -177,24 +184,23 @@ class EntityList {
                 return std::nullopt;
             }
 
-            auto entity_index = (handle & 0xFFF) - 1;
+            auto entity_index = handle & 0xFFF;
             return this->get_from_index(entity_index);
         }
 
         [[nodiscard]]
         auto get_from_index(uint32_t index) const -> std::optional<Entity> {
-            if(index > this->player_entity_list_size) {
+            if(index > this->player_entity_list_size || !index) {
                 return std::nullopt;
             }
 
-            Entity entity{
-                Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, ClientAddress + dwEntityList + index * 0x10)
-            };
-            if(!entity.isValid()) {
+            if(!this->class_ids[index]) {
                 return std::nullopt;
             }
 
-            return std::optional{entity};
+            return std::make_optional(
+                    Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, ClientAddress + dwEntityList + (index - 1) * 0x10)
+            );
         }
 
         auto get_entities(std::vector<Entity>& result) const -> bool {
@@ -216,19 +222,13 @@ class EntityList {
         [[nodiscard]]
         auto find_entity_of_type_t() const -> std::optional<T> {
             for (size_t i{0}; i < this->entity_list_size; i++) {
-                auto entity = std::make_optional<Entity>(
-                        Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, ClientAddress + dwEntityList + i * 0x10)
-                );
-
-                if(!entity->isValid()) {
+                if(this->class_ids[i] != T::kClassId) {
                     continue;
                 }
 
-                auto klass = entity->get_class();
-
-                if(T::kClassId == klass.get_class_id()) {
-                    return std::make_optional<T>(entity->GetEntityAddress());
-                }
+                return std::make_optional<T>(
+                        Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, ClientAddress + dwEntityList + i * 0x10)
+                );
             }
 
             return std::nullopt;
@@ -236,20 +236,16 @@ class EntityList {
 
         [[nodiscard]]
         auto find_entity_of_type(const netvar::ClientClass& klass) const -> std::optional<Entity> {
+            auto class_id = klass.get_class_id();
+
             for (size_t i{0}; i < this->entity_list_size; i++) {
-                auto entity = std::make_optional<Entity>(
+                if(this->class_ids[i] != class_id) {
+                    continue;
+                }
+
+                return std::make_optional<Entity>(
                         Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, ClientAddress + dwEntityList + i * 0x10)
                 );
-
-                if(!entity->isValid()) {
-                    continue;
-                }
-
-                if(entity->get_class() != klass) {
-                    continue;
-                }
-
-                return entity;
             }
 
             return std::nullopt;
@@ -265,21 +261,20 @@ EntityList entity_list;
 class PlayerInfoHelper {
     public:
         void initialize() {
-            this->dict_items = memory::dereference(EngineAddress, dwClientState, dwClientState_PlayerInfo, 0x40, 0x0C);
         }
 
-        auto load_info(size_t player_index, player_info_t& result) const -> bool {
-            if(!this->dict_items) {
-                std::memset(&result, 0, sizeof(player_info_t));
-                return false;
-            }
+        auto load_info(size_t player_index, player_info_t& result) -> bool {
+            memory::offsets_t<6> player_info_offsets{
+                    dwClientState,
+                    dwClientState_PlayerInfo,
+                    0x40, // network string dict
+                    0x0C, // dict items array
+                    (uint32_t) (0x28 + (player_index - 1) * 0x34), // the player_info_t* entry within the dict item array
+                    0x00 // offset within the player_info_t struct (zero as we're reading the whole struct
+            };
 
-            auto player_info_address = memory::dereference(this->dict_items, 0x28 + player_index * 0x34);
-            return memory::read(player_info_address, result);
+            return memory::dereferenced_read(EngineAddress, player_info_offsets, result);
         }
-
-    private:
-        uint32_t dict_items{0};
 };
 PlayerInfoHelper player_info_helper;
 
@@ -296,6 +291,9 @@ void UpdatePlayerESP() {
     overlay::vars::esp_entities.reserve(64);
     for(auto entity : entity_list.iterate_entities()) {
         if(!entity.isValidPlayer() || entity.IsDormant()) {
+            continue;
+        }
+        if(entity == LocalPlayerEnt) {
             continue;
         }
 
@@ -393,62 +391,6 @@ void UpdateObserverList() {
     }
 }
 
-void UpdateBombVisuals() {
-
-}
-
-void PrintPlayerRanks() {
-    auto PlayerResource = Driver->ReadVirtualMemory<uint32_t>(ProcessId, ClientAddress + dwPlayerResource, sizeof(uint32_t));
-    player_info_t player_info;
-
-    std::cout << "Player resource " << std::hex << PlayerResource << "\n";
-    for(auto entry : entity_list.iterate_entities()) {
-        auto entry_index = entry.GetEntityIndex();
-
-        // TODO: I'm not sure what's wrong but the data does not match what we expect.
-        auto Rank = Driver->ReadVirtualMemory<uint8_t>(ProcessId, PlayerResource + m_iCompetitiveRanking + (entry_index * 0x04), sizeof(uint8_t));
-        auto Wins = Driver->ReadVirtualMemory<uint16_t>(ProcessId, PlayerResource + m_iCompetitiveWins + (entry_index * 0x04), sizeof(uint16_t));
-
-        if(!player_info_helper.load_info(entry_index, player_info)) {
-            /* 22, include the null terminator */
-            memcpy(player_info.name, "Unknown (load failed)", 22);
-        }
-
-        if(Rank >= kRankNames.size()) {
-            /* last rank is the "invalid" rank state */
-            Rank = kRankNames.size() - 1;
-        }
-
-        std::cout << "===Player[" << entry_index << "]===" << std::endl;
-        std::cout << player_info.name << std::endl;
-        std::cout << kRankNames[Rank] << std::endl;
-        std::cout << "Wins: " << Wins << std::endl;
-        std::cout << std::endl;
-    }
-}
-
-// Get address of client.dll, engine.dll, and PID.
-void SetupAddresses() {
-    bool PrintOnce = false;
-    while(true) {
-        ProcessId = Driver->GetTargetPid();
-        ClientAddress = Driver->GetClientModule();
-        EngineAddress = Driver->GetEngineModule();
-        ClientSize = Driver->GetClientModuleSize();
-        EngineSize = Driver->GetEngineModuleSize();
-
-        if(ProcessId != 0 && ClientAddress != 0 && EngineAddress != 0 && ClientSize != 0 && EngineSize!= 0) {
-            break;
-        }
-
-        if (!PrintOnce)
-        {
-            std::cout << "Waiting for CSGO... " << std::endl;
-            PrintOnce = true;
-        }
-    }
-}
-
 float scaleDamageArmor(float flDamage, int armor_value)
 {
     float flArmorRatio = 0.5f;
@@ -479,6 +421,106 @@ struct GlobalVars {
     float interval_per_tick;
     float interpolation_amount;
 };
+
+void UpdateBombVisuals() {
+
+
+    auto bomb = entity_list.find_entity_of_type_t<entities::CPlantedC4>();
+    if(!bomb.has_value()) {
+        return;
+    }
+
+    auto local_player = entities::CCSPlayer{ Entity::getLocalPlayer().GetEntityAddress() };
+    auto player_position = local_player.get_origin();
+
+    std::cout << "Have bomb entity:\n";
+    auto bomb_position = bomb->get_origin();
+    //std::cout << "  x: " << bomb_position.x << " y: " << bomb_position.y << " z: " << bomb_position.z << "\n";
+
+    auto distance = (bomb_position - player_position).magnitude();
+    std::cout << "Distance: " << distance << "\n";
+
+    {
+        const auto damagePercentage = 1.0f;
+
+        auto flDamage = 500.f; // 500 - default, if radius is not written on the map https://i.imgur.com/mUSaTHj.png
+        auto flBombRadius = flDamage * 3.5f;
+        auto fSigma = flBombRadius / 3.0f;
+        auto fGaussianFalloff = exp(-distance * distance / (2.0f * fSigma * fSigma));
+        auto flAdjustedDamage = flDamage * fGaussianFalloff * damagePercentage;
+
+        flAdjustedDamage = scaleDamageArmor(flAdjustedDamage, local_player.get_armor_value());
+
+        GlobalVars globals{};
+        (void) memory::read(EngineAddress + dwGlobalVars, globals);
+        auto bomb_blow = bomb->get_c4_blow();
+
+        std::cout << std::dec << "Damage: " << flAdjustedDamage << " Time: " << (bomb_blow - globals.cur_time) << " Armor: " << local_player.get_armor_value() << " Heavy: " << local_player.has_heavy_armor() << "\n";
+    }
+}
+
+void PrintPlayerRanks() {
+    auto PlayerResource = Driver->ReadVirtualMemoryTV<uint32_t>(ProcessId, ClientAddress + dwPlayerResource,
+                                                                sizeof(uint32_t));
+    player_info_t player_info;
+
+    std::cout << "Player resource " << std::hex << PlayerResource << "\n";
+    for(auto entry : entity_list.iterate_entities()) {
+        auto entry_index = entry.GetEntityIndex();
+
+        // TODO: I'm not sure what's wrong but the data does not match what we expect.
+        auto Rank = Driver->ReadVirtualMemoryTV<uint8_t>(ProcessId,
+                                                         PlayerResource + m_iCompetitiveRanking + (entry_index * 0x04),
+                                                         sizeof(uint8_t));
+        auto Wins = Driver->ReadVirtualMemoryTV<uint16_t>(ProcessId,
+                                                          PlayerResource + m_iCompetitiveWins + (entry_index * 0x04),
+                                                          sizeof(uint16_t));
+
+        if(!player_info_helper.load_info(entry_index, player_info)) {
+            /* 22, include the null terminator */
+            memcpy(player_info.name, "Unknown (load failed)", 22);
+        }
+
+        if(Rank >= kRankNames.size()) {
+            /* last rank is the "invalid" rank state */
+            Rank = kRankNames.size() - 1;
+        }
+
+        std::cout << "===Player[" << entry_index << "]===" << std::endl;
+        std::cout << player_info.name << std::endl;
+        std::cout << kRankNames[Rank] << std::endl;
+        std::cout << "Wins: " << std::dec << Wins << std::endl;
+        std::cout << std::endl;
+    }
+}
+
+// Get address of client.dll, engine.dll, and PID.
+void SetupAddresses() {
+    using namespace std::chrono;
+
+    bool PrintOnce = false;
+    while(true) {
+        ProcessId = Driver->GetTargetPid();
+        if(ProcessId) {
+            ClientAddress = Driver->GetClientModule();
+            EngineAddress = Driver->GetEngineModule();
+            ClientSize = Driver->GetClientModuleSize();
+            EngineSize = Driver->GetEngineModuleSize();
+        }
+
+        if(ProcessId != 0 && ClientAddress != 0 && EngineAddress != 0 && ClientSize != 0 && EngineSize!= 0) {
+            break;
+        }
+
+        if (!PrintOnce)
+        {
+            std::cout << "Waiting for CSGO... " << std::endl;
+            PrintOnce = true;
+        }
+
+        std::this_thread::sleep_for(1000ms);
+    }
+}
 
 int main(int argc, char* argv[], char* envp[])
 {
@@ -536,7 +578,26 @@ int main(int argc, char* argv[], char* envp[])
         return 1;
     }
 
-    if(true) {
+    if(false) {
+        std::array<uint32_t, 2048> class_ids{};
+        if(!Driver->ReadEntityTableClasses(ProcessId, ClientAddress + dwEntityList, class_ids)) {
+            std::cout << "Failed to read class ids\n";
+            return 1;
+        }
+
+        for(size_t index{0}; index < class_ids.size(); index++) {
+            if(!class_ids[index]) {
+                continue;
+            }
+
+            std::cout << index << " -> " << class_ids[index] << "\n";
+        }
+
+        std::cout << "Entity table read.\n";
+        return 0;
+    }
+
+    if(false) {
         for(size_t index{0}; index < 2048; index++) {
             auto entity_address = Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, ClientAddress + dwEntityList + index * 0x10);
             if(!entity_address) {
@@ -557,7 +618,7 @@ int main(int argc, char* argv[], char* envp[])
             }
             std::cout << std::dec << index << " (" << std::hex << entity_address << ")" << " client class ptr: " << std::hex << client_class.address << " (" << client_class.get_name() << ")" << "\n";
         }
-        //return 0;
+        return 1;
     }
 
     player_info_helper.initialize();
@@ -586,37 +647,7 @@ int main(int argc, char* argv[], char* envp[])
             Sleep(500);
             continue;
         }
-
-        auto bomb = entity_list.find_entity_of_type_t<entities::CPlantedC4>();
-        if(bomb.has_value()) {
-            auto local_player = entities::CCSPlayer{ Entity::getLocalPlayer().GetEntityAddress() };
-            auto player_position = local_player.get_origin();
-
-            std::cout << "Have bomb entity:\n";
-            auto bomb_position = bomb->get_origin();
-            //std::cout << "  x: " << bomb_position.x << " y: " << bomb_position.y << " z: " << bomb_position.z << "\n";
-
-            auto distance = (bomb_position - player_position).magnitude();
-            std::cout << "Distance: " << distance << "\n";
-
-            {
-                const auto damagePercentage = 1.0f;
-
-                auto flDamage = 500.f; // 500 - default, if radius is not written on the map https://i.imgur.com/mUSaTHj.png
-                auto flBombRadius = flDamage * 3.5f;
-                auto fSigma = flBombRadius / 3.0f;
-                auto fGaussianFalloff = exp(-distance * distance / (2.0f * fSigma * fSigma));
-                auto flAdjustedDamage = flDamage * fGaussianFalloff * damagePercentage;
-
-                flAdjustedDamage = scaleDamageArmor(flAdjustedDamage, local_player.get_armor_value());
-
-                GlobalVars globals{};
-                (void) memory::read(EngineAddress + dwGlobalVars, globals);
-                auto bomb_blow = bomb->get_c4_blow();
-
-                std::cout << std::dec << "Damage: " << flAdjustedDamage << " Time: " << (bomb_blow - globals.cur_time) << " Armor: " << local_player.get_armor_value() << " Heavy: " << local_player.has_heavy_armor() << "\n";
-            }
-        }
+        entity_list.cache_entities();
 
         Entity LocalPlayerEnt = Entity::getLocalPlayer();
         if (aim.localPlayer.GetEntityAddress() != LocalPlayerEnt.GetEntityAddress())
@@ -626,6 +657,7 @@ int main(int argc, char* argv[], char* envp[])
 
         UpdatePlayerESP();
         UpdateObserverList();
+        UpdateBombVisuals();
 
         // Render all
         overlay::poll_input();
@@ -651,6 +683,6 @@ int main(int argc, char* argv[], char* envp[])
         }
 
 
-        //Sleep(3);
+        Sleep(3);
     }
 }

@@ -5153,7 +5153,7 @@ template<typename IteratorType> class iteration_proxy_value
              && std::is_nothrow_move_assignable<string_type>::value) = default;
     ~iteration_proxy_value() = default;
 
-    /// dereference operator (needed for range-based for)
+    /// DereferenceAddress operator (needed for range-based for)
     const iteration_proxy_value& operator*() const
     {
         return *this;
@@ -13104,7 +13104,7 @@ class iter_impl // NOLINT(cppcoreguidelines-special-member-functions,hicpp-speci
     }
 
     /*!
-    @brief dereference the iterator
+    @brief DereferenceAddress the iterator
     @pre The iterator is initialized; i.e. `m_object != nullptr`.
     */
     pointer operator->() const

@@ -38,7 +38,7 @@ public:
     DWORD GetCurrentWeapon();
 	
     uint32_t GetEntityAddress();
-        uint32_t GetEntityIndex();
+    uint32_t GetEntityIndex();
     uint32_t GetGlowIndex();
     uint16_t GetCurrentWeaponID();
     uint16_t GetWeaponIndex();

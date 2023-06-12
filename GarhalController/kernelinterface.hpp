@@ -2,6 +2,7 @@
 #pragma warning( disable : 4101 4244)
 
 #include "communications.hpp"
+#include <array>
 
 // The interface handler for IOCTL. Thanks Zeromem.
 class KeInterface
@@ -28,25 +29,45 @@ public:
     template <typename type>
     type ReadVirtualMemoryT(ULONG ProcessId, ULONG ReadAddress)
     {
-        return ReadVirtualMemory<type>(ProcessId, ReadAddress, sizeof(type));
+        return ReadVirtualMemoryTV<type>(ProcessId, ReadAddress, sizeof(type));
     }
 
     [[nodiscard("read success should be checked")]]
-    bool ReadVirtualMemoryBuffer(ULONG ProcessId, ULONG address, void* buffer, size_t size) const
+    bool ReadVirtualMemoryEx(ULONG ProcessId, ULONG address, const uint32_t* offset_buffer, size_t offset_count, void* buffer, size_t size) const
     {
         KERNEL_READ_REQUEST ReadRequest;
 
-        ReadRequest.ProcessId = ProcessId;
-        ReadRequest.Address = address;
+        ReadRequest.process_id = ProcessId;
+        ReadRequest.address = address;
 
-        ReadRequest.pBuff = buffer;
-        ReadRequest.Size = size;
+        ReadRequest.offset_buffer = offset_buffer;
+        ReadRequest.offset_count = offset_count;
+
+        ReadRequest.target_buffer = buffer;
+        ReadRequest.byte_count = size;
+
+        return (DeviceIoControl(hDriver, IO_READ_REQUEST, &ReadRequest, sizeof(ReadRequest), &ReadRequest, sizeof(ReadRequest), nullptr, nullptr) == TRUE);
+    }
+
+    [[nodiscard("read success should be checked")]]
+    bool ReadVirtualMemory(ULONG ProcessId, ULONG address, void* buffer, size_t size) const
+    {
+        KERNEL_READ_REQUEST ReadRequest;
+
+        ReadRequest.process_id = ProcessId;
+        ReadRequest.address = address;
+
+        ReadRequest.offset_count = 0;
+        ReadRequest.offset_buffer = nullptr;
+
+        ReadRequest.target_buffer = buffer;
+        ReadRequest.byte_count = size;
 
         return (DeviceIoControl(hDriver, IO_READ_REQUEST, &ReadRequest, sizeof(ReadRequest), &ReadRequest, sizeof(ReadRequest), nullptr, nullptr) == TRUE);
     }
 
 	template <typename type>
-	type ReadVirtualMemory(ULONG ProcessId, ULONG ReadAddress, SIZE_T Size)
+	type ReadVirtualMemoryTV(ULONG ProcessId, ULONG ReadAddress, SIZE_T Size)
 	{
 		// allocate a buffer with specified type to allow our driver to write our wanted data inside this buffer
 		type Buffer;
@@ -54,12 +75,15 @@ public:
 		KERNEL_READ_REQUEST ReadRequest;
 
 
-		ReadRequest.ProcessId = ProcessId;
-		ReadRequest.Address = ReadAddress;
+		ReadRequest.process_id = ProcessId;
+		ReadRequest.address = ReadAddress;
+
+        ReadRequest.offset_count = 0;
+        ReadRequest.offset_buffer = nullptr;
 
 		//send the 'address' of the buffer so our driver can know where to write the data
-		ReadRequest.pBuff = &Buffer;
-		ReadRequest.Size = Size;
+		ReadRequest.target_buffer = &Buffer;
+		ReadRequest.byte_count = Size;
 
 		// send code to our driver with the arguments
 		if (DeviceIoControl(
@@ -76,6 +100,20 @@ public:
 
 		return Buffer;
 	}
+
+    template <size_t N>
+    [[nodiscard("read success should be checked")]]
+    bool ReadEntityTableClasses(ULONG process_id, ULONG entity_table_address, std::array<uint32_t, N>& class_ids) const
+    {
+        KERNEL_FIND_ENTITIES_REQUEST request;
+
+        request.process_id = process_id;
+        request.entity_table_address = entity_table_address;
+        request.entity_table_size = N;
+        request.class_id_buffer = class_ids.data();
+
+        return (DeviceIoControl(hDriver, IO_FIND_ENTITIES_REQUEST, &request, sizeof(request), &request, sizeof(request), nullptr, nullptr) == TRUE);
+    }
 
 	template <typename type>
 	bool WriteVirtualMemory(ULONG ProcessId, ULONG WriteAddress, type WriteValue, SIZE_T WriteSize)
@@ -108,21 +146,6 @@ public:
 			return true;
 		}
 		return false;
-	}
-
-    [[nodiscard("read success should be checked")]]
-    bool ReadSpecial(ULONG ProcessId, DWORD dwAddress, LPVOID lpBuffer, DWORD dwSize) const
-	{
-		KERNEL_READ_REQUEST ReadRequest;
-
-		ReadRequest.ProcessId = ProcessId;
-		ReadRequest.Address = dwAddress;
-
-		ReadRequest.pBuff = &lpBuffer;
-
-		ReadRequest.Size = dwSize;
-
-		return (DeviceIoControl(hDriver, IO_READ_REQUEST, &ReadRequest, sizeof(ReadRequest), &ReadRequest, sizeof(ReadRequest), nullptr, nullptr) == TRUE);
 	}
 
 #pragma clang diagnostic push
@@ -227,39 +250,5 @@ public:
 			return Address;
 		}
 		return false;
-	}
-
-    [[nodiscard]]
-	BOOL DataCompare(const BYTE* pData, const BYTE* pMask, const char* pszMask) const
-	{
-		for (; *pszMask; ++pszMask, ++pData, ++pMask)
-		{
-			if (*pszMask == 'x' && *pData != *pMask)
-			{
-				return FALSE;
-			}
-		}
-		return (*pszMask == 0);
-	}
-
-    [[nodiscard]]
-	DWORD Scan(ULONG ProcessId, DWORD dwStart, DWORD dwSize, const char* pSignature, const char* pMask) const
-	{
-		BYTE* pRemote = new BYTE[dwSize];
-		if (!ReadSpecial(ProcessId, dwStart, pRemote, dwSize))
-		{
-			delete[] pRemote;
-			return NULL;
-		}
-		for (DWORD dwIndex = 0; dwIndex < dwSize; dwIndex++)
-		{
-			if (DataCompare((const BYTE*)(pRemote + dwIndex), (const BYTE*)pSignature, pMask))
-			{
-				delete[] pRemote;
-				return (dwStart + dwIndex);
-			}
-		}
-		delete[] pRemote;
-		return NULL;
 	}
 };

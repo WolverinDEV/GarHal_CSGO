@@ -318,7 +318,7 @@ inline bool IsWeaponSniper(int iWeaponID)
 #define MAX_STUDIO_BONES 128
 
 inline const float FovRange = 10.0f;
-extern DWORD ProcessId, ClientAddress, ClientSize, EngineAddress, EngineSize;
+extern uint32_t ProcessId, ClientAddress, ClientSize, EngineAddress, EngineSize;
 extern std::unique_ptr<KeInterface> Driver;
 
 class EntityList;
