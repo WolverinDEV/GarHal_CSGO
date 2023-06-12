@@ -4,6 +4,8 @@
 
 namespace csgo_settings
 {
+    float ui_scale{1.f};
+
     // Aimbot Type 0=Disabled, 1=Smooth, 2=Direct
     int AimbotState = 0;
     // https://docs.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes

@@ -391,22 +391,23 @@ void UpdateObserverList() {
     }
 }
 
-float scaleDamageArmor(float flDamage, int armor_value)
-{
-    float flArmorRatio = 0.5f;
-    float flArmorBonus = 0.5f;
-    if (armor_value > 0) {
-        float flNew = flDamage * flArmorRatio;
-        float flArmor = (flDamage - flNew) * flArmorBonus;
-
-        if (flArmor > static_cast<float>(armor_value)) {
-            flArmor = static_cast<float>(armor_value) * (1.f / flArmorBonus);
-            flNew = flDamage - flArmor;
-        }
-
-        flDamage = flNew;
+float damage_apply_armor(float total_damage, int armor_value) {
+    constexpr static auto kArmorRation = 0.5f; // is .5 for body armor, which the bomb affects
+    constexpr static auto kArmorWearoff = 0.5f; // is .5 for the normal armor (not a helmet)
+    if(armor_value <= 0) {
+        return total_damage;
     }
-    return flDamage;
+
+    float player_damage = total_damage * kArmorRation;
+    float armor_damage = (total_damage - player_damage) * kArmorWearoff;
+
+    if (armor_damage > (float) armor_value) {
+        /* Armor will get destroyed. The rest of damage is up to the player. */
+        armor_damage = (float) armor_value * (1.f / kArmorWearoff);
+        return total_damage - armor_damage;
+    } else {
+        return player_damage;
+    }
 }
 
 struct GlobalVars {
@@ -422,41 +423,85 @@ struct GlobalVars {
     float interpolation_amount;
 };
 
-void UpdateBombVisuals() {
+float calculate_bomb_damage(const Vector3f& player_position, const Vector3f& bomb_position, float bomb_damage) {
+    auto distance = (bomb_position - player_position).magnitude();
+    const auto damagePercentage = 1.0f;
 
+    auto bomb_radius = bomb_damage * 3.5f;
+    auto no_bomb_damage = abs(player_position.x - bomb_position.x) > bomb_radius || abs(player_position.y - bomb_position.y) > bomb_radius || abs(player_position.z - bomb_position.z) > bomb_radius;
+    if(no_bomb_damage) {
+        return 0;
+    }
+
+    auto fSigma = bomb_radius / 3.0f;
+    auto fGaussianFalloff = exp(-distance * distance / (2.0f * fSigma * fSigma));
+    return bomb_damage * fGaussianFalloff * damagePercentage;
+}
+
+void UpdateBombVisuals() {
+    namespace bomb_ui = overlay::vars::bomb;
+    using BombState = bomb_ui::State;
 
     auto bomb = entity_list.find_entity_of_type_t<entities::CPlantedC4>();
     if(!bomb.has_value()) {
+        bomb_ui::state = BombState::None;
         return;
     }
 
-    auto local_player = entities::CCSPlayer{ Entity::getLocalPlayer().GetEntityAddress() };
-    auto player_position = local_player.get_origin();
-
-    std::cout << "Have bomb entity:\n";
-    auto bomb_position = bomb->get_origin();
-    //std::cout << "  x: " << bomb_position.x << " y: " << bomb_position.y << " z: " << bomb_position.z << "\n";
-
-    auto distance = (bomb_position - player_position).magnitude();
-    std::cout << "Distance: " << distance << "\n";
-
-    {
-        const auto damagePercentage = 1.0f;
-
-        auto flDamage = 500.f; // 500 - default, if radius is not written on the map https://i.imgur.com/mUSaTHj.png
-        auto flBombRadius = flDamage * 3.5f;
-        auto fSigma = flBombRadius / 3.0f;
-        auto fGaussianFalloff = exp(-distance * distance / (2.0f * fSigma * fSigma));
-        auto flAdjustedDamage = flDamage * fGaussianFalloff * damagePercentage;
-
-        flAdjustedDamage = scaleDamageArmor(flAdjustedDamage, local_player.get_armor_value());
-
-        GlobalVars globals{};
-        (void) memory::read(EngineAddress + dwGlobalVars, globals);
-        auto bomb_blow = bomb->get_c4_blow();
-
-        std::cout << std::dec << "Damage: " << flAdjustedDamage << " Time: " << (bomb_blow - globals.cur_time) << " Armor: " << local_player.get_armor_value() << " Heavy: " << local_player.has_heavy_armor() << "\n";
+    bomb_ui::side = bomb->get_bomb_site();
+    if(bomb->is_bomb_defused()) {
+        bomb_ui::state = BombState::Defused;
+        return;
+    } else if(!bomb->is_bomb_ticking()) {
+        bomb_ui::state = BombState::Detonated;
+        return;
     }
+
+    bomb_ui::state = BombState::Active;
+
+    /* Calculate bomb damage. */
+    {
+        auto local_player = entities::CCSPlayer{ Entity::getLocalPlayer().GetEntityAddress() };
+        auto player_position = local_player.get_origin(); // TODO: Use the eye position - 19 %
+        auto bomb_position = bomb->get_origin();
+
+#undef max
+        auto bomb_damage = 500.f; // 500 - default, if radius is not written on the map https://i.imgur.com/mUSaTHj.png
+        auto player_bomb_damage = std::max(
+                // The zPoint is determined between the players eye level and 30 % above their feed. Just take two "close enought" points and take the highest.
+                calculate_bomb_damage(player_position, bomb_position  + Vector3f{ 0, 0, 40 }, bomb_damage),
+                calculate_bomb_damage(player_position + Vector3f{ 0, 0, 80 }, bomb_position, bomb_damage)
+        );
+        player_bomb_damage = damage_apply_armor(player_bomb_damage, local_player.get_armor_value());
+
+        bomb_ui::damage = floor(player_bomb_damage);
+        bomb_ui::damage_critical = local_player.get_health() <= bomb_ui::damage;
+    }
+
+    /* Calculate timings / defuser */
+    GlobalVars globals{};
+    (void) memory::read(EngineAddress + dwGlobalVars, globals);
+    auto bomb_blow = bomb->get_c4_blow();
+
+    bomb_ui::time_remaining = std::max(bomb_blow - globals.cur_time, 0.f);
+
+    auto defuse_handle = bomb->get_bomb_defuser();
+    if(!defuse_handle.is_valid()) {
+        bomb_ui::defuser.reset();
+    } else {
+        auto& defuser = bomb_ui::defuser.emplace();
+        defuser.time_total = bomb->get_defuse_length();
+        defuser.time_remaining = bomb->get_defuse_count_down() - globals.cur_time;
+        defuser.will_succeed = defuser.time_remaining < bomb_ui::time_remaining;
+
+        player_info_t player_info;
+        if(!player_info_helper.load_info(defuse_handle.get_entity_index(), player_info)) {
+            /* 22, include the null terminator */
+            memcpy(player_info.name, "Unknown (load failed)", 22);
+        }
+        defuser.name = player_info.name;
+    }
+    //std::cout << std::dec << "Damage: " << flAdjustedDamage << " Time: " << (bomb_blow - globals.cur_time) << " Armor: " << local_player.get_armor_value() << " Heavy: " << local_player.has_heavy_armor() << "\n";
 }
 
 void PrintPlayerRanks() {

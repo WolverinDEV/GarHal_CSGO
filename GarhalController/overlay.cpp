@@ -31,6 +31,13 @@ static std::unique_ptr<overlay::ImguiContext> imgui_context{nullptr};
 namespace overlay::vars {
     std::vector<ESPPlayerEntity> esp_entities{};
     std::vector<ObserverEntry> observer_entries{};
+
+    bomb::State bomb::state{bomb::State::None};
+    int bomb::side{0};
+    int bomb::damage{0};
+    bool bomb::damage_critical{false};
+    float bomb::time_remaining{0};
+    std::optional<bomb::Defuser> bomb::defuser{std::nullopt};
 }
 
 namespace overlay {
@@ -350,6 +357,40 @@ void render_esp_entries() {
     }
 }
 
+void render_bomb_info() {
+    namespace bomb = overlay::vars::bomb;
+    using BombState = bomb::State;
+    if(bomb::state == BombState::None) {
+        return;
+    }
+
+    ImGui::PushFont(imgui_context->mapFont[20]);
+    ImGui::SetCursorPosY(imgui_context->yScreen * 0.9375 - ImGui::GetTextLineHeightWithSpacing() * 3.5);
+    ImGui::Text("Bomb planted on %c", bomb::side == 0 ? 'A' : 'B');
+    ImGui::Text("Damage:");
+    if(bomb::damage_critical) {
+        ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 0, 0, 255));
+    }
+    ImGui::SameLine();
+    ImGui::Text("%d", bomb::damage);
+    if(bomb::damage_critical) {
+        ImGui::PopStyleColor();
+    }
+    ImGui::Text("Time: %.3f", overlay::vars::bomb::time_remaining);
+    if(!bomb::defuser.has_value()) {
+        ImGui::Text("Not defusing");
+    } else {
+        if(bomb::defuser->will_succeed) {
+            ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(55, 255, 55, 255));
+        }
+        ImGui::Text("Defused in %.3fs by %s", bomb::defuser->time_remaining, bomb::defuser->name.c_str());
+        if(bomb::defuser->will_succeed) {
+            ImGui::PopStyleColor();
+        }
+    }
+    ImGui::PopFont();
+}
+
 void overlay::render_frame() {
     assert(imgui_context);
 
@@ -366,13 +407,15 @@ void overlay::render_frame() {
 
     static const auto dwFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoClipping;
     ImGui::Begin("overlay", nullptr, dwFlags);
+    ImGui::SetWindowFontScale(csgo_settings::ui_scale);
     {
         render_esp_entries();
         render_observer_entries();
+        render_bomb_info();
 
         {
-            ImGui::Dummy(ImVec2{ 0.f, 20.f });
             ImGui::PushFont(imgui_context->mapFont[25]);
+            ImGui::SetCursorScreenPos(ImVec2{ imgui_context->xScreen - ImGui::CalcTextSize("FPS: ###.##").x - 20, 20 });
             ImGui::Text("FPS: %.2f", ImGui::GetIO().Framerate);
             ImGui::PopFont();
         }

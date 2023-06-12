@@ -73,6 +73,7 @@ void render_settings(const overlay::ImguiContext& ctx)
     {
         csgo_settings::ReadConfig("settings.json");
     }
+    ImGui::SliderFloat("UI Scale", &csgo_settings::ui_scale, .25f, 2.5f);
     ImGui::PopFont();
 }
 

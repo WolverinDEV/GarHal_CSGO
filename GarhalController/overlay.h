@@ -21,6 +21,7 @@
 #include <fstream>
 #include <ShlObj.h>
 #include <array>
+#include <optional>
 #include "icons.h"
 
 struct ESPPlayerEntity;
@@ -65,5 +66,32 @@ namespace overlay {
     namespace vars {
         extern std::vector<ESPPlayerEntity> esp_entities;
         extern std::vector<ObserverEntry> observer_entries;
+
+        namespace bomb {
+            enum struct State {
+                None,
+                Active,
+                Defused,
+                Detonated,
+            };
+
+            struct Defuser {
+                std::string name;
+
+                float time_total;
+                float time_remaining;
+
+                bool will_succeed;
+            };
+
+            extern State state;
+            extern int side;
+
+            extern int damage;
+            extern bool damage_critical;
+
+            extern float time_remaining;
+            extern std::optional<Defuser> defuser;
+        }
     }
 }

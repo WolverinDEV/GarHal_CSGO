@@ -32,4 +32,6 @@ namespace csgo_settings
     extern const std::vector<std::string> aimbotOptions;
     extern const std::vector<std::string> aimbotTargets;
     extern std::unordered_map<int, std::string> weaponIdHelper;
+
+    extern float ui_scale;
 }

@@ -76,6 +76,7 @@ struct class_definition {
                 return;
             }
 
+            sout << "  /* " << this->name << " at " << std::hex << this->offset << " */\n";
             size_t prefix_length{this->name.starts_with("m_") ? (size_t) 2 : 0};
             switch(this->type) {
                 case PROP_TYPE_INT: {
