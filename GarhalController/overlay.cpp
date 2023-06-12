@@ -32,6 +32,10 @@ namespace overlay::vars {
     std::vector<ESPPlayerEntity> esp_entities{};
     std::vector<ObserverEntry> observer_entries{};
 
+    std::vector<PlayerRank> players_ct;
+    std::vector<PlayerRank> players_t;
+    bool display_player_ranks;
+
     bomb::State bomb::state{bomb::State::None};
     int bomb::side{0};
     int bomb::damage{0};
@@ -120,7 +124,7 @@ bool initialize_window(overlay::ImguiContext& ctx, std::string &error) {
         RegisterClassEx(&ctx.wc);
 
         RECT rect;
-        GetWindowRect(GetDesktopWindow(), &rect);
+        GetClientRect(GetDesktopWindow(), &rect);
 
         ctx.hwnd = CreateWindowEx(WS_EX_LAYERED, ctx.wc.lpszClassName, _T("Default IME"),
                                    WS_EX_COMPOSITED | WS_EX_LAYERED | WS_EX_TRANSPARENT, rect.left, rect.top,
@@ -131,9 +135,10 @@ bool initialize_window(overlay::ImguiContext& ctx, std::string &error) {
         }
 
 
-        GetWindowRect(ctx.hwnd, &rect);
+        //GetClientRect(ctx.hwnd, &rect);
         ctx.xScreen = (float) rect.right;
         ctx.yScreen = (float) rect.bottom;
+        std::cout << "Screen X: " << ctx.xScreen << " Screen Y: " << ctx.yScreen << "\n";
 
         SetMenu(ctx.hwnd, nullptr);
         SetWindowLongPtr(ctx.hwnd, GWL_STYLE, WS_POPUP | WS_VISIBLE | WS_CLIPSIBLINGS);
@@ -391,6 +396,78 @@ void render_bomb_info() {
     ImGui::PopFont();
 }
 
+std::array<const char*, 20> kRankNames{
+        "Not ranked",
+        "Silver I",
+        "Silver II",
+        "Silver III",
+        "Silver IV",
+        "Silver Elite",
+        "Silver Elite Master",
+
+        "Gold Nova I",
+        "Gold Nova II",
+        "Gold Nova III",
+        "Gold Nova Master",
+        "Master Guardian I",
+        "Master Guardian II",
+
+        "Master Guardian Elite",
+        "Distinguished Master Guardian",
+        "Legendary Eagle",
+        "Legendary Eagle Master",
+        "Supreme Master First Class",
+        "The Global Elite",
+
+        "<< invalid >>"
+};
+
+void render_player_ranks() {
+    using namespace overlay::vars;
+    constexpr static auto kUnitBaseW = 3840.f;
+    constexpr static auto kUnitBaseH = 2160.f;
+
+    constexpr static auto kScoreHeight = 48.f;
+    constexpr static auto kScoreGap = 4.f;
+    constexpr static auto kScoreEnd = 2850.f;
+
+    constexpr static auto kCenterGapMM = 212.f;
+    constexpr static auto kCenterGapNormal = 48.f;
+
+
+    size_t player_count_ct = players_ct.size();
+    size_t player_count_t = players_t.size();
+
+    float player_offset = (kUnitBaseH + 5 * kScoreGap - kCenterGapMM - (float) (player_count_ct + player_count_t - 1) * (kScoreHeight + kScoreGap)) / 2;
+    //ImGui::GetWindowDrawList()->AddLine(ImVec2{ 1000, imgui_context->yScreen * player_offset / kUnitBaseH, }, ImVec2{2000, imgui_context->yScreen * player_offset / kUnitBaseH }, IM_COL32(255, 0, 255, 255));
+
+    auto display_rank = [](int rank) {
+        if(rank >= kRankNames.size()) {
+            /* last rank is the "invalid" rank state */
+            rank = kRankNames.size() - 1;
+        }
+
+        return kRankNames[rank];
+    };
+
+    ImGui::PushFont(imgui_context->mapFont[20]);
+    for(size_t index{0}; index < player_count_ct; index++) {
+        auto offset_y = player_offset + (float) index * (kScoreHeight + kScoreGap);
+        offset_y += 7.5; // to center the text
+        ImGui::SetCursorPos(ImVec2{ imgui_context->xScreen * kScoreEnd / kUnitBaseW, imgui_context->yScreen * offset_y / kUnitBaseH });
+        ImGui::Text("C K%i, D%i, S%i, %s (%i Wins)", players_ct[index].kills, players_ct[index].deaths, players_ct[index].score, display_rank(players_ct[index].rank), players_ct[index].wins);
+    }
+
+    for(size_t index{0}; index < player_count_t; index++) {
+        auto offset_y = player_offset + kCenterGapMM + (float) (player_count_ct + index) * (kScoreHeight + kScoreGap);
+        offset_y += 7.5; // to center the text
+        ImGui::SetCursorPos(ImVec2{ imgui_context->xScreen * kScoreEnd / kUnitBaseW, imgui_context->yScreen * offset_y / kUnitBaseH });
+        ImGui::Text("T K%i, D%i, S%i, %s (%i Wins)", players_t[index].kills, players_t[index].deaths, players_t[index].score, display_rank(players_t[index].rank), players_t[index].wins);
+    }
+
+    ImGui::PopFont();
+}
+
 void overlay::render_frame() {
     assert(imgui_context);
 
@@ -412,6 +489,10 @@ void overlay::render_frame() {
         render_esp_entries();
         render_observer_entries();
         render_bomb_info();
+
+        if (overlay::vars::display_player_ranks) {
+            render_player_ranks();
+        }
 
         {
             ImGui::PushFont(imgui_context->mapFont[25]);
@@ -464,4 +545,6 @@ void overlay::poll_input() {
             io.KeysPressed[i] = false;
         }
     }
+
+    overlay::vars::display_player_ranks = ImGui::IsCustomKeyPressed(VK_TAB, true);
 }

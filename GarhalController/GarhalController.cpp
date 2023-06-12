@@ -89,32 +89,6 @@ typedef struct player_info_s
 
 } player_info_t;
 
-std::array<const char*, 20> kRankNames{
-        "Not ranked",
-        "Silver I",
-        "Silver II",
-        "Silver III",
-        "Silver IV",
-        "Silver Elite",
-        "Silver Elite Master",
-
-        "Gold Nova I",
-        "Gold Nova II",
-        "Gold Nova III",
-        "Gold Nova Master",
-        "Master Guardian I",
-        "Master Guardian II",
-
-        "Master Guardian Elite",
-        "Distinguished Master Guardian",
-        "Legendary Eagle",
-        "Legendary Eagle Master",
-        "Supreme Master First Class",
-        "The Global Elite",
-
-        "<< invalid >>"
-};
-
 class EntityList {
         struct EntityIterator {
             explicit EntityIterator() noexcept : index{0}, end_index{0} {}
@@ -203,19 +177,15 @@ class EntityList {
             );
         }
 
-        auto get_entities(std::vector<Entity>& result) const -> bool {
-            for (size_t i{0}; i < this->player_entity_list_size; i++) {
-                Entity entity{
-            Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, ClientAddress + dwEntityList + i * 0x10)
-                };
-                if(!entity.isValid()) {
+        template<typename T>
+        void find_entities_of_type_t(std::vector<T>& result) const {
+            for (size_t i{0}; i < this->entity_list_size; i++) {
+                if(this->class_ids[i] != T::kClassId) {
                     continue;
                 }
 
-                result.push_back(entity);
+                result.emplace_back(Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, ClientAddress + dwEntityList + i * 0x10));
             }
-
-            return true;
         }
 
         template<typename T>
@@ -504,39 +474,71 @@ void UpdateBombVisuals() {
     //std::cout << std::dec << "Damage: " << flAdjustedDamage << " Time: " << (bomb_blow - globals.cur_time) << " Armor: " << local_player.get_armor_value() << " Heavy: " << local_player.has_heavy_armor() << "\n";
 }
 
-void PrintPlayerRanks() {
-    auto PlayerResource = Driver->ReadVirtualMemoryTV<uint32_t>(ProcessId, ClientAddress + dwPlayerResource,
-                                                                sizeof(uint32_t));
-    player_info_t player_info;
+bool sort_player_score_entries(const overlay::vars::PlayerRank& a, const overlay::vars::PlayerRank& b) {
+    if(a.score > b.score) {
+        return true;
+    } else if(a.score < b.score) {
+        return false;
+    }
 
-    std::cout << "Player resource " << std::hex << PlayerResource << "\n";
+    if(a.deaths > b.deaths) {
+        return false;
+    } else if(a.deaths < b.deaths) {
+        return true;
+    }
+
+    if(a.kills > b.kills) {
+        return true;
+    } else if(a.kills < b.kills) {
+        return false;
+    }
+
+    return true;
+}
+
+void UpdatePlayerScores() {
+    using namespace overlay::vars;
+
+    players_ct.clear();
+    players_ct.reserve(10);
+
+    players_t.clear();
+    players_t.reserve(10);
+
+    auto player_resource = entity_list.find_entity_of_type_t<entities::CCSPlayerResource>();
+    if(!player_resource.has_value()) {
+        return;
+    }
+
     for(auto entry : entity_list.iterate_entities()) {
         auto entry_index = entry.GetEntityIndex();
+        auto team = entry.getTeam();
+        if(team != 2 && team != 3) {
+            continue;
+        }
 
-        // TODO: I'm not sure what's wrong but the data does not match what we expect.
-        auto Rank = Driver->ReadVirtualMemoryTV<uint8_t>(ProcessId,
-                                                         PlayerResource + m_iCompetitiveRanking + (entry_index * 0x04),
+        auto& score_entity = team == 2 ? players_t.emplace_back() : players_ct.emplace_back();
+
+        /* TODO: It might be faster to read the whole table instead of the little chunks for every player. */
+        score_entity.rank = Driver->ReadVirtualMemoryTV<uint8_t>(ProcessId,
+                                                         player_resource->address + m_iCompetitiveRanking + (entry_index * 0x04),
                                                          sizeof(uint8_t));
-        auto Wins = Driver->ReadVirtualMemoryTV<uint16_t>(ProcessId,
-                                                          PlayerResource + m_iCompetitiveWins + (entry_index * 0x04),
+        score_entity.wins = Driver->ReadVirtualMemoryTV<uint16_t>(ProcessId,
+                                                          player_resource->address + m_iCompetitiveWins + (entry_index * 0x04),
                                                           sizeof(uint16_t));
-
-        if(!player_info_helper.load_info(entry_index, player_info)) {
-            /* 22, include the null terminator */
-            memcpy(player_info.name, "Unknown (load failed)", 22);
-        }
-
-        if(Rank >= kRankNames.size()) {
-            /* last rank is the "invalid" rank state */
-            Rank = kRankNames.size() - 1;
-        }
-
-        std::cout << "===Player[" << entry_index << "]===" << std::endl;
-        std::cout << player_info.name << std::endl;
-        std::cout << kRankNames[Rank] << std::endl;
-        std::cout << "Wins: " << std::dec << Wins << std::endl;
-        std::cout << std::endl;
+        score_entity.score = Driver->ReadVirtualMemoryTV<uint16_t>(ProcessId,
+                                                           player_resource->address + 0x1980 + (entry_index * 0x04),
+                                                          sizeof(uint16_t));
+        score_entity.kills = Driver->ReadVirtualMemoryTV<uint16_t>(ProcessId,
+                                                                   player_resource->address + 0x5b08 + (entry_index * 0x04),
+                                                                   sizeof(uint16_t));
+        score_entity.deaths = Driver->ReadVirtualMemoryTV<uint16_t>(ProcessId,
+                                                                   player_resource->address + 0x5d10 + (entry_index * 0x04),
+                                                                   sizeof(uint16_t));
     }
+
+    std::stable_sort(players_ct.begin(), players_ct.end(), sort_player_score_entries);
+    std::stable_sort(players_t.begin(), players_t.end(), sort_player_score_entries);
 }
 
 // Get address of client.dll, engine.dll, and PID.
@@ -667,7 +669,6 @@ int main(int argc, char* argv[], char* envp[])
     }
 
     player_info_helper.initialize();
-    PrintPlayerRanks();
 
     // load settings
     csgo_settings::ReadConfig("settings.json");
@@ -703,6 +704,10 @@ int main(int argc, char* argv[], char* envp[])
         UpdatePlayerESP();
         UpdateObserverList();
         UpdateBombVisuals();
+        if(overlay::vars::display_player_ranks) {
+            /* only update player scores when they get displayed */
+            UpdatePlayerScores();
+        }
 
         // Render all
         overlay::poll_input();

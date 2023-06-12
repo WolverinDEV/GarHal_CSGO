@@ -67,6 +67,18 @@ namespace overlay {
         extern std::vector<ESPPlayerEntity> esp_entities;
         extern std::vector<ObserverEntry> observer_entries;
 
+        struct PlayerRank {
+            int rank;
+            int wins;
+
+            int score;
+            int kills;
+            int deaths;
+        };
+        extern std::vector<PlayerRank> players_ct;
+        extern std::vector<PlayerRank> players_t;
+        extern bool display_player_ranks;
+
         namespace bomb {
             enum struct State {
                 None,
