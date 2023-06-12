@@ -963,7 +963,7 @@ STBTT_DEF unsigned char * stbtt_GetCodepointSDF(const stbtt_fontinfo *info, floa
 //      offset outlines (e.g. to stroke the character border inside & outside,
 //      or only outside). For example, to fill outside the character up to 3 SDF
 //      pixels, you would compare against (180-36.0*3)/255 = 72/255. The above
-//      choice of variables maps a range from 5 pixels outside the shape to
+//      choice of vars maps a range from 5 pixels outside the shape to
 //      2 pixels inside the shape to 0..255; this is intended primarily for apply
 //      outside effects only (the interior range is needed to allow proper
 //      antialiasing of the font at *smaller* sizes)
@@ -3090,7 +3090,7 @@ static void stbtt__fill_active_edges_new(float *scanline, float *scanline_fill, 
                // from the other y segment, and it might ignored as an empty segment. to avoid
                // that, we need to explicitly produce segments based on x positions.
 
-               // rename variables to clearly-defined pairs
+               // rename vars to clearly-defined pairs
                float y0 = y_top;
                float x1 = (float) (x);
                float x2 = (float) (x+1);

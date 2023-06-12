@@ -15,16 +15,16 @@ namespace csgo_settings
     extern int AimbotKey;
     extern int AimbotTarget;
     extern int AimbotBullets;
-    extern bool Bhop;
-    extern bool Wallhack;
-    extern bool NoFlash;
+
+    extern bool player_esp;
+
     extern bool TriggerBot;
     extern int TriggerBotKey;
     extern bool TriggerBotDelay;
-    extern bool Radar;
     extern std::vector<int> TriggerBotAllowed;
     extern int TriggerBotDelayMin;
     extern int TriggerBotDelayMax;
+
     extern bool useVsync;
     extern bool showMenu;
     extern nlohmann::fifo_map<std::string, int> weaponIds;

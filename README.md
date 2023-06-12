@@ -39,7 +39,7 @@ This project probably has mistakes. Feel free to correct me through PRs.
 * No flash (Flagged)
 * Displays enemies on the Radar (Flagged)
 * Bhop (Flagged)
-* Simple glow Wallhack (Flagged / Removed)
+* Simple glow player_esp (Flagged / Removed)
 
 ## Changelog
 * **Changes on 2020.07.31**: The driver now detects process termination. Should have coded It more faster than being lazy. The controller, and rankreader sends an IOCTL code to the driver once they have been launched, and loaded. If we would do this sooner, the applications would not start up. We are now completely re-writing the access flags, and the usermode applications should be untouchable by VAC for now. The usermode applications now wait until the addresses are not zero at startup. The plan to make an anti-aimbot was dropped. A kernel driver should be all about being non-straightforward, and used carefully to draw less attention. Please continue testing, and let me know if there are any issues.

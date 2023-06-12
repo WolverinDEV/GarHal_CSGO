@@ -252,7 +252,7 @@ bool netvar::dump_all(std::string &error) {
 
         fout << "#error \"Missing super class for " << definition.name << " (" << definition.super_class << ")\"\n";
     }
-    return false;
+    return true;
 }
 
 ClientClass netvar::get_class_list_head() {

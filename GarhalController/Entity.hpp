@@ -33,7 +33,6 @@ public:
     Vector3 getVelocity();
     Vector3 getHeadPosition();
     Vector3 GetBonePosition(uint32_t targetBone);
-    RenderData getRenderData(uint8_t OurTeam, Vector3 screenPos, float inGameDistance);
 
     DWORD GetWeaponHandle();
     DWORD GetCurrentWeapon();

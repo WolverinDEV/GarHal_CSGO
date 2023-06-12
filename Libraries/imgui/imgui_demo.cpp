@@ -21,7 +21,7 @@
 // -Your beloved friend, imgui_demo.cpp (which you won't delete)
 
 // Message to beginner C/C++ programmers about the meaning of the 'static' keyword:
-// In this demo code, we frequently use 'static' variables inside functions. A static variable persists across calls,
+// In this demo code, we frequently use 'static' vars inside functions. A static variable persists across calls,
 // so it is essentially like a global variable but declared inside the scope of the function. We do this as a way to
 // gather code and data in the same place, to make the demo source code faster to read, faster to write, and smaller
 // in size. It also happens to be a convenient way of storing simple UI related information as long as your function
@@ -31,7 +31,7 @@
 // The Demo code in this file is designed to be easy to copy-and-paste into your application!
 // Because of this:
 // - We never omit the ImGui:: prefix when calling functions, even though most code here is in the same namespace.
-// - We try to declare static variables in the local scope, as close as possible to the code using them.
+// - We try to declare static vars in the local scope, as close as possible to the code using them.
 // - We never use any of the helpers/facilities used internally by Dear ImGui, unless available in the public API.
 // - We never use maths operators on ImVec2/ImVec4. For our other sources files we use them, and they are provided
 //   by imgui_internal.h using the IMGUI_DEFINE_MATH_OPERATORS define. For your own sources file they are optional
@@ -1868,7 +1868,7 @@ static void ShowDemoWindowWidgets()
         // - integer/float/double
         // To avoid polluting the public API with all possible combinations, we use the ImGuiDataType enum
         // to pass the type, and passing all arguments by pointer.
-        // This is the reason the test code below creates local variables to hold "zero" "one" etc. for each types.
+        // This is the reason the test code below creates local vars to hold "zero" "one" etc. for each types.
         // In practice, if you frequently use a given type that is not covered by the normal API entry points,
         // you can wrap it yourself inside a 1 line function which can take typed argument as value instead of void*,
         // and then pass their address to the generic function. For example:
@@ -1877,7 +1877,7 @@ static void ShowDemoWindowWidgets()
         //      return SliderScalar(label, ImGuiDataType_U64, value, &min, &max, format);
         //   }
 
-        // Setup limits (as helper variables so we can take their address, as explained above)
+        // Setup limits (as helper vars so we can take their address, as explained above)
         // Note: SliderScalar() functions have a maximum usable range of half the natural type maximum, hence the /2.
         #ifndef LLONG_MIN
         ImS64 LLONG_MIN = -9223372036854775807LL - 1;

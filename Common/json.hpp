@@ -4307,7 +4307,7 @@ class exception : public std::exception
     }
 
     /// the id of the exception
-    const int id; // NOLINT(cppcoreguidelines-non-private-member-variables-in-classes)
+    const int id; // NOLINT(cppcoreguidelines-non-private-member-vars-in-classes)
 
   protected:
     JSON_HEDLEY_NON_NULL(3)
@@ -12062,12 +12062,12 @@ class binary_reader
 
   JSON_PRIVATE_UNLESS_TESTED:
     // lookup tables
-    // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes)
+    // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-vars-in-classes)
     const decltype(JSON_BINARY_READER_MAKE_BJD_OPTIMIZED_TYPE_MARKERS_) bjd_optimized_type_markers =
         JSON_BINARY_READER_MAKE_BJD_OPTIMIZED_TYPE_MARKERS_;
 
     using bjd_type = std::pair<char_int_type, string_t>;
-    // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes)
+    // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-vars-in-classes)
     const decltype(JSON_BINARY_READER_MAKE_BJD_TYPES_MAP_) bjd_types_map =
         JSON_BINARY_READER_MAKE_BJD_TYPES_MAP_;
 
@@ -19255,7 +19255,7 @@ NLOHMANN_JSON_NAMESPACE_BEGIN
 @brief a class to store JSON values
 
 @internal
-@invariant The member variables @a m_value and @a m_type have the following
+@invariant The member vars @a m_value and @a m_type have the following
 relationship:
 - If `m_type == value_t::object`, then `m_value.object != nullptr`.
 - If `m_type == value_t::array`, then `m_value.array != nullptr`.
@@ -23355,7 +23355,7 @@ class basic_json // NOLINT(cppcoreguidelines-special-member-functions,hicpp-spec
 
   JSON_PRIVATE_UNLESS_TESTED:
     //////////////////////
-    // member variables //
+    // member vars //
     //////////////////////
 
     /// the type of the current element

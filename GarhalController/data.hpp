@@ -25,18 +25,15 @@ struct GlowStruct
 	int glowStyle;
 };
 
-typedef struct _RenderData
-{
-	// TODO: Implement name for yourself
-	const char* name = "Garhal";
-	float x = 0, y = 0;
-	float inGameDistance = 0;
-	ImVec4 color = { 0.f, 0.f, 0.f, 1.f };
-	bool scale = true;
-	bool render = true;
-	ImVec2 headPos;
-	std::vector<std::pair<ImVec2, ImVec2>> bones = {};
-} RenderData;
+struct ESPPlayerEntity {
+    float x = 0, y = 0;
+    float inGameDistance = 0;
+    ImVec4 color = {0.f, 0.f, 0.f, 1.f};
+    bool scale = true;
+    bool render = true;
+    ImVec2 headPos;
+    std::vector<std::pair<ImVec2, ImVec2>> bones = {};
+};
 
 struct ObserverEntry {
     std::string name;

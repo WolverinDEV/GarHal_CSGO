@@ -8,7 +8,7 @@ find_package(ImGui REQUIRED)
 file(GLOB SOURCES "*.cpp" "*.hpp")
 add_executable(garhal-controller
     ${SOURCES}
-        netvar.cpp netvar.h vector.h netvars.h)
+        netvar.cpp netvar.h vector.h netvars.h overlay.cpp overlay.h overlay_menu.cpp overlay_menu.h)
 
 target_include_directories(garhal-controller PRIVATE ${DirectX_INCLUDE_DIRS})
 target_link_directories(garhal-controller PRIVATE ${DirectX_LIBRARY_PATHS})

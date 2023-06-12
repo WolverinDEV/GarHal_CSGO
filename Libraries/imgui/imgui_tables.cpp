@@ -1046,7 +1046,7 @@ void ImGui::TableUpdateLayout(ImGuiTable* table)
         //else if (column->Flags & ImGuiTableColumnFlags_AlignCenter)
         //    column->WorkMinX = ImLerp(column->WorkMinX, ImMax(column->StartX, column->MaxX - column->ContentWidthRowsUnfrozen), 0.5f);
 
-        // Reset content width variables
+        // Reset content width vars
         column->ContentMaxXFrozen = column->ContentMaxXUnfrozen = column->WorkMinX;
         column->ContentMaxXHeadersUsed = column->ContentMaxXHeadersIdeal = column->WorkMinX;
 

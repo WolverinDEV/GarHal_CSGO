@@ -31,7 +31,7 @@ PCHAR HideProcess(UINT32 pid)
 	// Get current process
 	PEPROCESS CurrentEPROCESS = PsGetCurrentProcess();
 
-	// Initialize other variables
+	// Initialize other vars
 	PLIST_ENTRY CurrentList = (PLIST_ENTRY)((ULONG_PTR)CurrentEPROCESS + LIST_OFFSET);
 	PUINT32 CurrentPID = (PUINT32)((ULONG_PTR)CurrentEPROCESS + PID_OFFSET);
 

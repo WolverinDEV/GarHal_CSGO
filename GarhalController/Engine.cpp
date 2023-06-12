@@ -1,5 +1,6 @@
 #include "Engine.hpp"
 #include "offsets.hpp"
+#include "./memory.hpp"
 
 // hazedumper namespace
 using namespace hazedumper::netvars;
@@ -23,22 +24,21 @@ bool engine::worldToScreen(const Vector3& from, Vector3& to)
 
 bool engine::IsInGame()
 {
-    uint32_t ClientState = Driver->ReadVirtualMemory<uint32_t>(ProcessId, EngineAddress + dwClientState, sizeof(uint32_t));
-    uint32_t Second = Driver->ReadVirtualMemory<uint32_t>(ProcessId, ClientState + dwClientState_State, sizeof(uint32_t));
-    return GetGameState(Second) == InGame;
+    auto client_state = memory::dereference(EngineAddress, dwClientState);
+    auto game_state = memory::read<uint8_t>(client_state + dwClientState_State).value_or(0);
+    return GetGameState(game_state) == InGame;
 }
 
 GameState engine::GetGameState(uint8_t State)
 {
-	switch (State)
-    {
+	switch (State) {
 		case 0: return Lobby;
         case 1: return Loading;
         case 2: return Connecting;
         case 5: return Connected;
         case 6: return InGame;
+        default: return UnknownG;
     }
-    return UnknownG;
 }
 
 Vector3 engine::getViewAngles()

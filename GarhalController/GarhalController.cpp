@@ -10,13 +10,13 @@
 #include "Entity.hpp"
 #include <Windows.h>
 #include <optional>
-#include "csgo_menu.hpp"
 #include "csgo_settings.hpp"
 #include "imgui_extensions.h"
 #include "utils.hpp"
 #include "./memory.hpp"
 #include "./netvar.h"
 #include "./netvars.h"
+#include "./overlay.h"
 
 // hazedumper namespace
 using namespace hazedumper::netvars;
@@ -283,7 +283,70 @@ class PlayerInfoHelper {
 };
 PlayerInfoHelper player_info_helper;
 
-void UpdateObserverList(std::vector<ObserverEntry>& observer_list) {
+void UpdatePlayerESP() {
+    overlay::vars::esp_entities.clear();
+    if(!csgo_settings::player_esp) {
+        return;
+    }
+
+    Entity LocalPlayerEnt = Entity::getLocalPlayer();
+    Vector3 myPosition = LocalPlayerEnt.getAbsolutePosition();
+    uint8_t OurTeam = LocalPlayerEnt.getTeam();
+
+    overlay::vars::esp_entities.reserve(64);
+    for(auto entity : entity_list.iterate_entities()) {
+        if(!entity.isValidPlayer() || entity.IsDormant()) {
+            continue;
+        }
+
+        Vector3 screenPos;
+        Vector3 position = entity.getAbsolutePosition();
+        if (!engine::worldToScreen(position, screenPos)) {
+            continue;
+        }
+        entity.BuildBonePairs();
+
+        auto& renderData = overlay::vars::esp_entities.emplace_back();
+        renderData.x = screenPos.at(0);
+        renderData.y = screenPos.at(1);
+        renderData.inGameDistance = (position - myPosition).norm();
+        if(entity.getTeam() == OurTeam) {
+            renderData.color = ImVec4(0, 1, 0, .4);
+        } else {
+            renderData.color = ImVec4(1, 0, 0, .4);
+        }
+
+        Vector3 headScreenPos;
+        if (engine::worldToScreen(entity.getHeadPosition(), headScreenPos))
+        {
+            renderData.headPos = ImVec2(headScreenPos.at(0), headScreenPos.at(1));
+        }
+
+        for (size_t y = 0; y < entity.CurrentBonePairs; ++y)
+        {
+            const auto& pair = entity.BonePairs[y];
+
+            if (pair.first == pair.second || pair.first < 0 || pair.second < 0 || pair.first > 128 || pair.second > 128)
+            {
+                continue;
+            }
+
+            Vector3 boneScreenPos;
+            Vector3 boneScreenPos2;
+            if (engine::worldToScreen(entity.BonePositions[pair.first], boneScreenPos)
+                && engine::worldToScreen(entity.BonePositions[pair.second], boneScreenPos2))
+            {
+                renderData.bones.emplace_back(ImVec2(boneScreenPos.at(0), boneScreenPos.at(1)),
+                                              ImVec2(boneScreenPos2.at(0), boneScreenPos2.at(1)));
+            }
+        }
+    }
+}
+
+void UpdateObserverList() {
+    overlay::vars::observer_entries.clear();
+    overlay::vars::observer_entries.reserve(64);
+
     auto local_player = Entity::getLocalPlayer();
     auto target_player = local_player;
     if(target_player.getObserverMode() != OBS_MODE_NONE && target_player.getObserverMode() != OBS_MODE_POI) {
@@ -322,12 +385,16 @@ void UpdateObserverList(std::vector<ObserverEntry>& observer_list) {
             memcpy(player_info.name, "Unknown (load failed)", 22);
         }
 
-        observer_list.emplace_back(ObserverEntry{
+        overlay::vars::observer_entries.emplace_back(ObserverEntry{
                 .name = std::string{player_info.name},
                 .mode = entity.getObserverMode(),
                 .is_local = entity == local_player
         });
     }
+}
+
+void UpdateBombVisuals() {
+
 }
 
 void PrintPlayerRanks() {
@@ -452,13 +519,10 @@ int main(int argc, char* argv[], char* envp[])
     std::cout << "AimbotKey: " << static_cast<unsigned>(csgo_settings::AimbotKey) << std::endl;
     std::cout << "AimbotTarget: " << static_cast<unsigned>(csgo_settings::AimbotTarget) << std::endl;
     std::cout << "AimbotBullets: " << static_cast<unsigned>(csgo_settings::AimbotBullets) << std::endl;
-    std::cout << "Bhop: " << std::boolalpha << csgo_settings::Bhop << std::endl;
-    std::cout << "Wallhack: " << std::boolalpha << csgo_settings::Wallhack << std::endl;
-    std::cout << "NoFlash: " << std::boolalpha << csgo_settings::NoFlash << std::endl;
+    std::cout << "player_esp: " << std::boolalpha << csgo_settings::player_esp << std::endl;
     std::cout << "TriggerBot: " << std::boolalpha << csgo_settings::TriggerBot << std::endl;
     std::cout << "TriggerBotKey: " << static_cast<unsigned>(csgo_settings::TriggerBotKey) << std::endl;
     std::cout << "TriggerBotDelay: " << std::boolalpha << csgo_settings::TriggerBotDelay << std::endl;
-    std::cout << "Radar: " << std::boolalpha << csgo_settings::Radar << std::endl;
 
     auto class_base_entity = netvar::find_class("CBaseEntity");
     if(!class_base_entity.has_value()) {
@@ -499,12 +563,11 @@ int main(int argc, char* argv[], char* envp[])
     player_info_helper.initialize();
     PrintPlayerRanks();
 
-
-    // Initialize our renderer
-    CSGORender csgoRender;
-    if (!csgoRender.createWindow()) {
-        std::cout << "Failed to create window!" << std::endl;
-        MessageBoxA(nullptr, "Failed to create window!", "Garhal", MB_OK | MB_ICONWARNING);
+    // load settings
+    csgo_settings::ReadConfig("settings.json");
+    if(!overlay::initialize(error)) {
+        std::cout << "Failed to create overlay: " << error << std::endl;
+        MessageBoxA(nullptr, ("Failed to create overlay: " + error + "!").c_str(), "Garhal", MB_OK | MB_ICONWARNING);
         return 0x1;
     }
 
@@ -515,19 +578,9 @@ int main(int argc, char* argv[], char* envp[])
     std::thread TriggerBotT(TriggerBotThread);
 
     Driver->RequestProtection();
-
-    // We are creating a renderData list where you can dump all the informations you wish to render
-    // Note that we are currently only using this to render bones, It is up to you what you make out of it.
-    std::vector<RenderData> renderDatas;
-    std::vector<ObserverEntry> observerEntries;
-
     std::cout << "enter loop\n";
     while (true)
     {
-        // Clear render datas
-        renderDatas.clear();
-        observerEntries.clear();
-        
         if (!engine::IsInGame())
         {
             Sleep(500);
@@ -563,27 +616,7 @@ int main(int argc, char* argv[], char* envp[])
 
                 std::cout << std::dec << "Damage: " << flAdjustedDamage << " Time: " << (bomb_blow - globals.cur_time) << " Armor: " << local_player.get_armor_value() << " Heavy: " << local_player.has_heavy_armor() << "\n";
             }
-//#define READ_PROPERTY(name, type) \
-//do {                  \
-//    auto property = class_planted_c4->find_offset(name); \
-//    if(property.has_value()) { \
-//        auto value = memory::read<type>(bomb_entity->GetEntityAddress() + *property); \
-//        std::cout << "  " << name << ": " << std::hex << (uint32_t) value.value_or(0) << "\n"; \
-//    }                     \
-//} while(0)
-//            READ_PROPERTY("m_bBombTicking", uint8_t);
-//            READ_PROPERTY("m_nBombSite", uint8_t);
-//            READ_PROPERTY("m_flC4Blow", float);
-//            READ_PROPERTY("m_flTimerLength", float);
-//            READ_PROPERTY("m_flDefuseLength", float);
-//            READ_PROPERTY("m_flDefuseCountDown", float);
-//            READ_PROPERTY("m_bBombDefused", uint8_t);
-//            READ_PROPERTY("m_hBombDefuser", uint32_t);
         }
-
-        // Ready to read, reserve a potentional amount in the memory.
-        renderDatas.reserve(64);
-        observerEntries.reserve(64);
 
         Entity LocalPlayerEnt = Entity::getLocalPlayer();
         if (aim.localPlayer.GetEntityAddress() != LocalPlayerEnt.GetEntityAddress())
@@ -591,88 +624,12 @@ int main(int argc, char* argv[], char* envp[])
             aim.localPlayer = LocalPlayerEnt;
         }
 
-        uint8_t OurTeam = LocalPlayerEnt.getTeam();
-        if (csgo_settings::NoFlash)
-        {
-            LocalPlayerEnt.SetFlashAlpha(0.0f);
-        }
-
-        Vector3 myPosition = LocalPlayerEnt.getAbsolutePosition();
-
-        for(auto entity : entity_list.iterate_entities()) {
-            if(!entity.isValidPlayer() || entity.IsDormant()) {
-                continue;
-            }
-
-            if (csgo_settings::Wallhack)
-            {
-                Vector3 screenPos;
-                Vector3 position = entity.getAbsolutePosition();
-                if (engine::worldToScreen(position, screenPos))
-                {
-                    entity.BuildBonePairs();
-
-                    const float distance = (position - myPosition).norm();
-                    RenderData renderData = entity.getRenderData(OurTeam, screenPos, distance);
-
-                    Vector3 headScreenPos;
-                    if (engine::worldToScreen(entity.getHeadPosition(), headScreenPos))
-                    {
-                        renderData.headPos = ImVec2(headScreenPos.at(0), headScreenPos.at(1));
-                    }
-
-                    for (size_t y = 0; y < entity.CurrentBonePairs; ++y)
-                    {
-                        const auto& pair = entity.BonePairs[y];
-
-                        if (pair.first == pair.second || pair.first < 0 || pair.second < 0 || pair.first > 128 || pair.second > 128)
-                        {
-                            continue;
-                        }
-
-                        Vector3 boneScreenPos;
-                        Vector3 boneScreenPos2;
-                        if (engine::worldToScreen(entity.BonePositions[pair.first], boneScreenPos)
-                            && engine::worldToScreen(entity.BonePositions[pair.second], boneScreenPos2))
-                        {
-                            renderData.bones.emplace_back(ImVec2(boneScreenPos.at(0), boneScreenPos.at(1)),
-                                ImVec2(boneScreenPos2.at(0), boneScreenPos2.at(1)));
-                        }
-                    }
-
-                    renderDatas.push_back(renderData);
-                }
-                // Old glow is now flagged.
-                //ent.SetCorrectGlowStruct(OurTeam, GlowObject);
-            }
-
-            // TODO: Implement your own 2D radar into the rendering as using this will flag you.
-            if (csgo_settings::Radar)
-            {
-                Driver->WriteVirtualMemory<bool>(ProcessId, entity.GetEntityAddress() + m_bSpotted, true, sizeof(bool));
-            }
-        }
-
-        UpdateObserverList(observerEntries);
+        UpdatePlayerESP();
+        UpdateObserverList();
 
         // Render all
-        csgoRender.PollSystem();
-        csgoRender.render(renderDatas, observerEntries);
-
-        // This is flagged, use It only by understanding that you might get banned.
-        if (csgo_settings::Bhop)
-        {
-            if (ImGui::IsCustomKeyPressed(VK_SPACE, true))
-            {
-                if (LocalPlayerEnt.isValidPlayer())
-                {
-                    if (!LocalPlayerEnt.isInAir())
-                    {
-                        LocalPlayerEnt.SetForceJump(6);
-                    }
-                }
-            }
-        }
+        overlay::poll_input();
+        overlay::render_frame();
 
         if (csgo_settings::AimbotState == 1)
         {
@@ -694,6 +651,6 @@ int main(int argc, char* argv[], char* envp[])
         }
 
 
-        Sleep(3);
+        //Sleep(3);
     }
 }

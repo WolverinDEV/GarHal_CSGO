@@ -12,12 +12,8 @@ namespace csgo_settings
     int AimbotTarget = 0;
     // Aimbot Assist begins at Nth bullet. (Used when AimbotState is 1)
     int AimbotBullets = 3;
-    // Use Bhop?
-    bool Bhop = false;
-    // Enable Wallhack
-    bool Wallhack = true;
-    // Enable NoFlash
-    bool NoFlash = false;
+    // Enable player_esp
+    bool player_esp = true;
     // Enable Triggerbot
     bool TriggerBot = false;
     // Key to use triggerbot, set to 0 to make It automatic. (https://docs.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes)
@@ -27,8 +23,6 @@ namespace csgo_settings
     // Triggerbot random delay (8,15) means we are delaying randomby between 8-15 millisecs. 0 is good to use at minimum.
     int TriggerBotDelayMin = 8;
     int TriggerBotDelayMax = 15;
-    // Enable Radar mark?
-    bool Radar = false;
     // Vsync
     bool useVsync = false;
     // Show menu
@@ -187,10 +181,7 @@ namespace csgo_settings
                 csgo_settings::AimbotKey = jsonConfig["AimbotKey"];
                 csgo_settings::AimbotTarget = jsonConfig["AimbotTarget"];
                 csgo_settings::AimbotBullets = jsonConfig["AimbotBullets"];
-                csgo_settings::Bhop = jsonConfig["Bhop"];
-                csgo_settings::Wallhack = jsonConfig["Wallhack"];
-                csgo_settings::NoFlash = jsonConfig["NoFlash"];
-                csgo_settings::Radar = jsonConfig["Radar"];
+                csgo_settings::player_esp = jsonConfig["player_esp"];
                 csgo_settings::TriggerBot = jsonConfig["TriggerBot"];
                 csgo_settings::TriggerBotKey = jsonConfig["TriggerBotKey"];
                 csgo_settings::TriggerBotDelay = jsonConfig["TriggerBotDelay"];
@@ -227,10 +218,7 @@ namespace csgo_settings
         jsonConfig["AimbotKey"] = csgo_settings::AimbotKey;
         jsonConfig["AimbotTarget"] = csgo_settings::AimbotTarget;
         jsonConfig["AimbotBullets"] = csgo_settings::AimbotBullets;
-        jsonConfig["Bhop"] = csgo_settings::Bhop;
-        jsonConfig["Wallhack"] = csgo_settings::Wallhack;
-        jsonConfig["NoFlash"] = csgo_settings::NoFlash;
-        jsonConfig["Radar"] = csgo_settings::Radar;
+        jsonConfig["player_esp"] = csgo_settings::player_esp;
         jsonConfig["TriggerBot"] = csgo_settings::TriggerBot;
         jsonConfig["TriggerBotKey"] = csgo_settings::TriggerBotKey;
         jsonConfig["TriggerBotDelay"] = csgo_settings::TriggerBotDelay;

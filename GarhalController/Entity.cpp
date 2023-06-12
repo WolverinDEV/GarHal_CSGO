@@ -198,26 +198,6 @@ void Entity::BuildBonePairs()
     }
 }
 
-RenderData Entity::getRenderData(uint8_t OurTeam, Vector3 screenPos, float inGameDistance)
-{
-    uint8_t ReadTeam = this->getTeam();
-    // Green
-    ImVec4 color = ImVec4(0, 1, 0, .4);
-    if (OurTeam != ReadTeam)
-    {
-        // Red
-        color = ImVec4(1, 0, 0, .4);
-    }
-    
-    return RenderData
-    {
-        .x = screenPos.at(0),
-        .y = screenPos.at(1),
-        .inGameDistance = inGameDistance,
-        .color = color
-    };
-}
-
 Vector3 Entity::getHeadPosition()
 {
     Vector3 Origin = Driver->ReadVirtualMemory<Vector3>(ProcessId, EntityAddress + m_vecOrigin, sizeof(Vector3));
