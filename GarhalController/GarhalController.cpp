@@ -50,7 +50,6 @@ void TriggerBotThread()
             continue;
         }
 
-        //uint32_t LocalPlayer = Driver->ReadVirtualMemoryTV<uint32_t>(process_id, ClientAddress + dwLocalPlayer, sizeof(uint32_t));
         Entity LocalPlayerEnt = aim.localPlayer;
 
         if (csgo_settings::TriggerBotKey == 0 || ImGui::IsCustomKeyPressed(csgo_settings::TriggerBotKey, true))
@@ -216,7 +215,7 @@ class EntityList {
                 }
 
                 return std::make_optional<Entity>(
-                        Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, ClientAddress + dwEntityList + i * 0x10)
+                        memory::dereference(ClientAddress + dwEntityList + i * 0x10)
                 );
             }
 
@@ -522,24 +521,12 @@ void UpdatePlayerScores() {
         score_entity.entity_index = entry.GetEntityIndex();
 
         /* TODO: It might be faster to read the whole table instead of the little chunks for every player. */
-        score_entity.rank = Driver->ReadVirtualMemoryTV<uint8_t>(ProcessId,
-                                                         player_resource->address + m_iCompetitiveRanking + (entry_index * 0x04),
-                                                         sizeof(uint8_t));
-        score_entity.wins = Driver->ReadVirtualMemoryTV<uint16_t>(ProcessId,
-                                                          player_resource->address + m_iCompetitiveWins + (entry_index * 0x04),
-                                                          sizeof(uint16_t));
-        score_entity.score = Driver->ReadVirtualMemoryTV<uint16_t>(ProcessId,
-                                                           player_resource->address + 0x1980 + (entry_index * 0x04),
-                                                          sizeof(uint16_t));
-        score_entity.kills = Driver->ReadVirtualMemoryTV<uint16_t>(ProcessId,
-                                                                   player_resource->address + 0x5b08 + (entry_index * 0x04),
-                                                                   sizeof(uint16_t));
-        score_entity.deaths = Driver->ReadVirtualMemoryTV<uint16_t>(ProcessId,
-                                                                   player_resource->address + 0x5d10 + (entry_index * 0x04),
-                                                                   sizeof(uint16_t));
-        score_entity.color = Driver->ReadVirtualMemoryTV<uint16_t>(ProcessId,
-                                                                    player_resource->address + 0x1cd0 + (entry_index * 0x04),
-                                                                    sizeof(uint16_t));
+        score_entity.rank = player_resource->get_competitive_ranking(entry_index);
+        score_entity.wins = player_resource->get_competitive_wins(entry_index);
+        score_entity.score = player_resource->get_score(entry_index);
+        score_entity.kills = player_resource->get_kills(entry_index);
+        score_entity.deaths = player_resource->get_deaths(entry_index);
+        score_entity.color = player_resource->get_comp_teammate_color(entry_index);
     }
 
     std::sort(players_ct.begin(), players_ct.end(), sort_player_score_entries);

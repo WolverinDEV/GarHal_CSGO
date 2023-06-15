@@ -445,15 +445,6 @@ std::array<const char*, 6> kCompTeammateColor{
 
     "U"
 };
-//enum iCompTeammateColor {
-//    COLOR_GREY =  -1,
-//    //Matchmaking
-//    COLOR_YELLOW = 0,
-//    COLOR_PURPLE = 1,
-//    COLOR_GREEN  = 2,
-//    COLOR_BLUE   = 3,
-//    COLOR_ORANGE = 4,
-//};
 
 void render_player_ranks() {
     using namespace overlay::vars;
