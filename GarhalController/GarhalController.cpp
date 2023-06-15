@@ -173,7 +173,7 @@ class EntityList {
             }
 
             return std::make_optional(
-                    memory::dereference(ClientAddress + dwEntityList + (index - 1) * 0x10))
+                    memory::dereference(ClientAddress + dwEntityList + (index - 1) * 0x10)
             );
         }
 
@@ -185,7 +185,7 @@ class EntityList {
                 }
 
                 result.emplace_back(
-                        memory::dereference(ClientAddress + dwEntityList + i * 0x10))
+                        memory::dereference(ClientAddress + dwEntityList + i * 0x10)
                 );
             }
         }
@@ -199,7 +199,7 @@ class EntityList {
                 }
 
                 return std::make_optional<T>(
-                        Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, ClientAddress + dwEntityList + i * 0x10)
+                        memory::dereference(ClientAddress + dwEntityList + i * 0x10)
                 );
             }
 

@@ -60,8 +60,12 @@ namespace netvar {
         }
 
         template <typename T>
-        inline auto read_array(uint32_t address, uint32_t offset, size_t index) {
-            auto target_address = address + offset + (index * array_entry_size<T>());
+        inline auto read_array(uint32_t address, uint32_t offset, size_t index, size_t element_count, size_t element_size) {
+            if(index > element_count) {
+                throw std::exception{"index out of range"};
+            }
+
+            auto target_address = address + offset + (index * element_size);
             return read_value<T>(target_address);
         }
 
@@ -87,7 +91,12 @@ namespace netvar {
                                          \
         inline auto operator!=(const name& other) const -> bool { \
             return this->address != other.address; \
-        } \
+        }                                                  \
+\
+        [[nodiscard]]\
+        inline auto get_address() const -> uint32_t{\
+            return this->address;\
+        }
 
     // Define a simple class variable
     #define NET_CLASS_VAR_S(name, type, offset) \
@@ -104,10 +113,22 @@ namespace netvar {
         };
 
     // Define a net class var which contains an array
-    #define NET_CLASS_VAR_A(name, type, offset) \
+    #define NET_CLASS_VAR_A(name, type, offset, element_count, element_size) \
         [[nodiscard]] \
         inline auto name(size_t index) const noexcept { \
-            return ::netvar::impl::read_array<type>(this->address, offset, index); \
+            return ::netvar::impl::read_array<type>(this->address, offset, index, element_count, element_size); \
+        };                                                                   \
+                                                                             \
+        [[nodiscard]] \
+        inline auto name ##_count() const noexcept { \
+            return (element_count); \
+        };
+
+    // Define a data table reference
+    #define NET_CLASS_VAR_DTR(name, type) \
+        [[nodiscard]] \
+        inline auto name(size_t index) const noexcept { \
+            return type{ this->address }; \
         };
 
     // Define a net class var which contains an array pointer
@@ -139,7 +160,10 @@ struct RecvTable;
         NET_CLASS_VAR_S(get_num_elements, int, 0x34);
         NET_CLASS_VAR_S(get_element_stride, int, 0x30);
         NET_CLASS_VAR_S(get_string_buffer_size, int, 0x0C);
-        //NET_CLASS_VAR_R(get_data_table, RecvTable, 0x28);
+        NET_CLASS_VAR_C(get_parent_array_prop_name, 0x38, 64);
+
+        [[nodiscard]] \
+        inline auto get_data_table() const noexcept;
     END_NET_CLASS(RecvProp);
 
     DEFINE_NET_CLASS(RecvTable, kClassIdNone, 0x00, netvar::class_base);
@@ -157,6 +181,7 @@ struct RecvTable;
         [[nodiscard]]
         auto find_offset(const std::string_view& /* property */) const -> std::optional<uint32_t>;
     END_NET_CLASS(ClientClass);
+    NET_CLASS_VAR_S(RecvProp::get_data_table, RecvTable*, 0x28);
 
     extern bool dump_all(std::string& /* error */);
     extern ClientClass get_class_list_head();
