@@ -68,8 +68,12 @@ namespace overlay {
         extern std::vector<ObserverEntry> observer_entries;
 
         struct PlayerRank {
+            uint32_t entity_index;
+
             int rank;
             int wins;
+
+            int color;
 
             int score;
             int kills;

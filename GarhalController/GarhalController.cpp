@@ -119,7 +119,7 @@ class EntityList {
             [[nodiscard]]
             auto current_entity() const noexcept -> Entity {
                 return Entity{
-            Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, ClientAddress + dwEntityList + this->index * 0x10)
+                    memory::dereference(ClientAddress + dwEntityList + this->index * 0x10)
                 };
             }
 
@@ -173,7 +173,7 @@ class EntityList {
             }
 
             return std::make_optional(
-                    Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, ClientAddress + dwEntityList + (index - 1) * 0x10)
+                    memory::dereference(ClientAddress + dwEntityList + (index - 1) * 0x10))
             );
         }
 
@@ -184,7 +184,9 @@ class EntityList {
                     continue;
                 }
 
-                result.emplace_back(Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, ClientAddress + dwEntityList + i * 0x10));
+                result.emplace_back(
+                        memory::dereference(ClientAddress + dwEntityList + i * 0x10))
+                );
             }
         }
 
@@ -243,6 +245,8 @@ class PlayerInfoHelper {
                     0x00 // offset within the player_info_t struct (zero as we're reading the whole struct
             };
 
+            /* 22, include the null terminator */
+            memcpy(result.name, "Unknown (load failed)", 22);
             return memory::dereferenced_read(EngineAddress, player_info_offsets, result);
         }
 };
@@ -348,11 +352,7 @@ void UpdateObserverList() {
             continue;
         }
 
-        if(!player_info_helper.load_info(entity.GetEntityIndex(), player_info)) {
-            /* 22, include the null terminator */
-            memcpy(player_info.name, "Unknown (load failed)", 22);
-        }
-
+        (void) player_info_helper.load_info(entity.GetEntityIndex(), player_info);
         overlay::vars::observer_entries.emplace_back(ObserverEntry{
                 .name = std::string{player_info.name},
                 .mode = entity.getObserverMode(),
@@ -481,19 +481,20 @@ bool sort_player_score_entries(const overlay::vars::PlayerRank& a, const overlay
         return false;
     }
 
-    if(a.deaths > b.deaths) {
-        return false;
-    } else if(a.deaths < b.deaths) {
-        return true;
-    }
-
     if(a.kills > b.kills) {
         return true;
     } else if(a.kills < b.kills) {
         return false;
     }
 
-    return true;
+    if(a.deaths > b.deaths) {
+        return false;
+    } else if(a.deaths < b.deaths) {
+        return true;
+    }
+
+    assert(a.entity_index != b.entity_index);
+    return a.entity_index < b.entity_index;
 }
 
 void UpdatePlayerScores() {
@@ -518,6 +519,7 @@ void UpdatePlayerScores() {
         }
 
         auto& score_entity = team == 2 ? players_t.emplace_back() : players_ct.emplace_back();
+        score_entity.entity_index = entry.GetEntityIndex();
 
         /* TODO: It might be faster to read the whole table instead of the little chunks for every player. */
         score_entity.rank = Driver->ReadVirtualMemoryTV<uint8_t>(ProcessId,
@@ -535,10 +537,13 @@ void UpdatePlayerScores() {
         score_entity.deaths = Driver->ReadVirtualMemoryTV<uint16_t>(ProcessId,
                                                                    player_resource->address + 0x5d10 + (entry_index * 0x04),
                                                                    sizeof(uint16_t));
+        score_entity.color = Driver->ReadVirtualMemoryTV<uint16_t>(ProcessId,
+                                                                    player_resource->address + 0x1cd0 + (entry_index * 0x04),
+                                                                    sizeof(uint16_t));
     }
 
-    std::stable_sort(players_ct.begin(), players_ct.end(), sort_player_score_entries);
-    std::stable_sort(players_t.begin(), players_t.end(), sort_player_score_entries);
+    std::sort(players_ct.begin(), players_ct.end(), sort_player_score_entries);
+    std::sort(players_t.begin(), players_t.end(), sort_player_score_entries);
 }
 
 // Get address of client.dll, engine.dll, and PID.
@@ -603,6 +608,7 @@ int main(int argc, char* argv[], char* envp[])
         return 1;
     }
 
+    csgo_settings::ReadConfig("settings.json");
     std::cout << "==== Config Values ====" << std::endl;
     std::cout << "AimbotState: " << static_cast<unsigned>(csgo_settings::AimbotState) << std::endl;
     std::cout << "AimbotKey: " << static_cast<unsigned>(csgo_settings::AimbotKey) << std::endl;
@@ -625,53 +631,8 @@ int main(int argc, char* argv[], char* envp[])
         return 1;
     }
 
-    if(false) {
-        std::array<uint32_t, 2048> class_ids{};
-        if(!Driver->ReadEntityTableClasses(ProcessId, ClientAddress + dwEntityList, class_ids)) {
-            std::cout << "Failed to read class ids\n";
-            return 1;
-        }
-
-        for(size_t index{0}; index < class_ids.size(); index++) {
-            if(!class_ids[index]) {
-                continue;
-            }
-
-            std::cout << index << " -> " << class_ids[index] << "\n";
-        }
-
-        std::cout << "Entity table read.\n";
-        return 0;
-    }
-
-    if(false) {
-        for(size_t index{0}; index < 2048; index++) {
-            auto entity_address = Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, ClientAddress + dwEntityList + index * 0x10);
-            if(!entity_address) {
-                //std::cout << index << " no entity\n";
-                continue;
-            }
-
-            auto client_class_address = memory::dereference(entity_address,
-                0x08, // IClientNetworkable vtable
-                2 * 0x04, // GetClientClass
-                0x01 // MOV EAX <ClientClass ptr>
-            );
-
-            netvar::ClientClass client_class{client_class_address};
-
-            if(client_class.get_name().find("Bomb") == std::string::npos) {
-                //continue;
-            }
-            std::cout << std::dec << index << " (" << std::hex << entity_address << ")" << " client class ptr: " << std::hex << client_class.address << " (" << client_class.get_name() << ")" << "\n";
-        }
-        return 1;
-    }
-
     player_info_helper.initialize();
 
-    // load settings
-    csgo_settings::ReadConfig("settings.json");
     if(!overlay::initialize(error)) {
         std::cout << "Failed to create overlay: " << error << std::endl;
         MessageBoxA(nullptr, ("Failed to create overlay: " + error + "!").c_str(), "Garhal", MB_OK | MB_ICONWARNING);

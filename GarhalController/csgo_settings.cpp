@@ -16,6 +16,10 @@ namespace csgo_settings
     int AimbotBullets = 3;
     // Enable player_esp
     bool player_esp = true;
+
+    bool show_spectators{true};
+    bool show_spectator_perspective{false};
+
     // Enable Triggerbot
     bool TriggerBot = false;
     // Key to use triggerbot, set to 0 to make It automatic. (https://docs.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes)
@@ -190,6 +194,9 @@ namespace csgo_settings
                 csgo_settings::TriggerBotDelayMin = jsonConfig["TriggerBotDelayMin"];
                 csgo_settings::TriggerBotDelayMax = jsonConfig["TriggerBotDelayMax"];
 
+                csgo_settings::show_spectator_perspective = jsonConfig["spectator"]["shown"];
+                csgo_settings::show_spectator_perspective = jsonConfig["spectator"]["perspective"];
+
                 std::vector<bool> selectedWeaponIdsList = jsonConfig["selectedWeaponIds"];
                 const int size = *(&csgo_settings::selectedWeaponIds + 1) - csgo_settings::selectedWeaponIds;
                 for (size_t i(0); i < size; ++i)
@@ -228,6 +235,10 @@ namespace csgo_settings
         jsonConfig["TriggerBotDelayMin"] = csgo_settings::TriggerBotDelayMin;
         jsonConfig["TriggerBotDelayMax"] = csgo_settings::TriggerBotDelayMax;
         jsonConfig["useVsync"] = csgo_settings::useVsync;
+
+
+        jsonConfig["spectator"]["shown"] = csgo_settings::show_spectator_perspective;
+        jsonConfig["spectator"]["perspective"] = csgo_settings::show_spectator_perspective;
 
         fprintf(pFile, "%s\n", jsonConfig.dump().c_str());
 

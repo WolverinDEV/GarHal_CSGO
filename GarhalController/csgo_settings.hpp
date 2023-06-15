@@ -18,6 +18,9 @@ namespace csgo_settings
 
     extern bool player_esp;
 
+    extern bool show_spectators;
+    extern bool show_spectator_perspective;
+
     extern bool TriggerBot;
     extern int TriggerBotKey;
     extern bool TriggerBotDelay;

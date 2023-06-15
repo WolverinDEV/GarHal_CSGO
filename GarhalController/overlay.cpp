@@ -235,6 +235,9 @@ void render_end() {
 }
 
 void render_observer_entries() {
+    if(!csgo_settings::show_spectators) {
+        return;
+    }
     assert(imgui_context);
 
     static std::array<std::string, 8> kObserverModeNames{
@@ -250,33 +253,44 @@ void render_observer_entries() {
 
     ImGui::PushFont(imgui_context->mapFont[25]);
     {
-
         ImGui::Text("Spectator count: %llu", overlay::vars::observer_entries.size());
-        if(ImGui::BeginTable("Spectators",  2)) {
-            for(auto& entry : overlay::vars::observer_entries) {
-                ImGui::TableNextRow();
+        if(csgo_settings::show_spectator_perspective) {
+            if(ImGui::BeginTable("Spectators",  2)) {
+                for(auto& entry : overlay::vars::observer_entries) {
+                    ImGui::TableNextRow();
 
+                    if(entry.is_local) {
+                        ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(0, 255, 0, 255));
+                    }
+
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%s", entry.name.c_str());
+
+                    ImGui::TableNextColumn();
+                    if(entry.mode >= kObserverModeNames.size()) {
+                        ImGui::Text("Unknown");
+                    } else {
+                        ImGui::Text("%s", kObserverModeNames[entry.mode].c_str());
+                    }
+
+
+                    if(entry.is_local) {
+                        ImGui::PopStyleColor();
+                    }
+                }
+
+                ImGui::EndTable();
+            }
+        } else {
+            for(auto& entry : overlay::vars::observer_entries) {
                 if(entry.is_local) {
                     ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(0, 255, 0, 255));
                 }
-
-                ImGui::TableNextColumn();
                 ImGui::Text("%s", entry.name.c_str());
-
-                ImGui::TableNextColumn();
-                if(entry.mode >= kObserverModeNames.size()) {
-                    ImGui::Text("Unknown");
-                } else {
-                    ImGui::Text("%s", kObserverModeNames[entry.mode].c_str());
-                }
-
-
                 if(entry.is_local) {
                     ImGui::PopStyleColor();
                 }
             }
-
-            ImGui::EndTable();
         }
     }
     ImGui::PopFont();
@@ -422,6 +436,25 @@ std::array<const char*, 20> kRankNames{
         "<< invalid >>"
 };
 
+std::array<const char*, 6> kCompTeammateColor{
+    "Y",
+    "P",
+    "G",
+    "B",
+    "O",
+
+    "U"
+};
+//enum iCompTeammateColor {
+//    COLOR_GREY =  -1,
+//    //Matchmaking
+//    COLOR_YELLOW = 0,
+//    COLOR_PURPLE = 1,
+//    COLOR_GREEN  = 2,
+//    COLOR_BLUE   = 3,
+//    COLOR_ORANGE = 4,
+//};
+
 void render_player_ranks() {
     using namespace overlay::vars;
     constexpr static auto kUnitBaseW = 3840.f;
@@ -450,21 +483,28 @@ void render_player_ranks() {
         return kRankNames[rank];
     };
 
+    auto render_rank_list = [display_rank](const std::vector<PlayerRank>& ranks, float y_offset) {
+        int sum_ranks{0};
+        for(size_t index{0}; index < ranks.size(); index++) {
+            auto offset_y = y_offset + (float) index * (kScoreHeight + kScoreGap);
+            offset_y += 7.5; // to center the text
+            ImGui::SetCursorPos(ImVec2{ imgui_context->xScreen * kScoreEnd / kUnitBaseW, imgui_context->yScreen * offset_y / kUnitBaseH });
+
+            int color = ranks[index].color;
+            if(color >= kCompTeammateColor.size() || color < 0) {
+                color = kCompTeammateColor.size() - 1;
+            }
+            ImGui::Text("%s %s (%i Wins)", kCompTeammateColor[color], display_rank(ranks[index].rank), ranks[index].wins);
+            sum_ranks += ranks[index].rank;
+        }
+        ImGui::Spacing();
+        ImGui::SetCursorPosX(imgui_context->xScreen * kScoreEnd / kUnitBaseW);
+        ImGui::Text("Sum Ranks: %i", sum_ranks);
+    };
+
     ImGui::PushFont(imgui_context->mapFont[20]);
-    for(size_t index{0}; index < player_count_ct; index++) {
-        auto offset_y = player_offset + (float) index * (kScoreHeight + kScoreGap);
-        offset_y += 7.5; // to center the text
-        ImGui::SetCursorPos(ImVec2{ imgui_context->xScreen * kScoreEnd / kUnitBaseW, imgui_context->yScreen * offset_y / kUnitBaseH });
-        ImGui::Text("C K%i, D%i, S%i, %s (%i Wins)", players_ct[index].kills, players_ct[index].deaths, players_ct[index].score, display_rank(players_ct[index].rank), players_ct[index].wins);
-    }
-
-    for(size_t index{0}; index < player_count_t; index++) {
-        auto offset_y = player_offset + kCenterGapMM + (float) (player_count_ct + index) * (kScoreHeight + kScoreGap);
-        offset_y += 7.5; // to center the text
-        ImGui::SetCursorPos(ImVec2{ imgui_context->xScreen * kScoreEnd / kUnitBaseW, imgui_context->yScreen * offset_y / kUnitBaseH });
-        ImGui::Text("T K%i, D%i, S%i, %s (%i Wins)", players_t[index].kills, players_t[index].deaths, players_t[index].score, display_rank(players_t[index].rank), players_t[index].wins);
-    }
-
+    render_rank_list(overlay::vars::players_ct, player_offset);
+    render_rank_list(overlay::vars::players_t, player_offset + kCenterGapMM + (float) player_count_ct * (kScoreHeight + kScoreGap));
     ImGui::PopFont();
 }
 
