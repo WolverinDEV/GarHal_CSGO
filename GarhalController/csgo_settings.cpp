@@ -16,6 +16,7 @@ namespace csgo_settings
     int AimbotBullets = 3;
     // Enable player_esp
     bool player_esp = true;
+    int update_sleep_delay{3};
 
     bool show_spectators{true};
     bool show_spectator_perspective{false};

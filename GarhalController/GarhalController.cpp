@@ -152,13 +152,12 @@ class EntityList {
         }
 
         [[nodiscard]]
-        auto get_from_handle(uint32_t handle) const -> std::optional<Entity> {
-            if((handle & 0xFFF) == 0xFFF) {
+        auto get_from_handle(const entities::EntityHandle& handle) const -> std::optional<Entity> {
+            if(!handle.is_valid()) {
                 return std::nullopt;
             }
 
-            auto entity_index = handle & 0xFFF;
-            return this->get_from_index(entity_index);
+            return this->get_from_index(handle.get_entity_index());
         }
 
         [[nodiscard]]
@@ -223,6 +222,11 @@ class EntityList {
         }
 
         [[nodiscard]]
+        auto get_local_player() const -> entities::CCSPlayer {
+            return entities::CCSPlayer{ memory::dereference(ClientAddress + dwLocalPlayer) };
+        }
+
+        [[nodiscard]]
         auto iterate_entities() const -> EntityListIterator {
             return EntityListIterator{this};
         }
@@ -257,16 +261,23 @@ void UpdatePlayerESP() {
         return;
     }
 
-    Entity LocalPlayerEnt = Entity::getLocalPlayer();
-    Vector3 myPosition = LocalPlayerEnt.getAbsolutePosition();
-    uint8_t OurTeam = LocalPlayerEnt.getTeam();
+    Entity target_player = Entity::getLocalPlayer();
+    if(target_player.getObserverMode() != OBS_MODE_NONE && target_player.getObserverMode() != OBS_MODE_POI) {
+        auto observe_target = entity_list.get_from_handle(target_player.getObserverTarget());
+        if(observe_target.has_value()) {
+            target_player = *observe_target;
+        }
+    }
+
+    Vector3 myPosition = target_player.getAbsolutePosition();
+    uint8_t OurTeam = target_player.getTeam();
 
     overlay::vars::esp_entities.reserve(64);
     for(auto entity : entity_list.iterate_entities()) {
         if(!entity.isValidPlayer() || entity.IsDormant()) {
             continue;
         }
-        if(entity == LocalPlayerEnt) {
+        if(entity == target_player) {
             continue;
         }
 
@@ -361,18 +372,17 @@ void UpdateObserverList() {
 }
 
 float damage_apply_armor(float total_damage, int armor_value) {
-    constexpr static auto kArmorRation = 0.5f; // is .5 for body armor, which the bomb affects
+    constexpr static auto kArmorRatio = 0.5f; // is .5 for body armor, which the bomb affects
     constexpr static auto kArmorWearoff = 0.5f; // is .5 for the normal armor (not a helmet)
     if(armor_value <= 0) {
         return total_damage;
     }
 
-    float player_damage = total_damage * kArmorRation;
-    float armor_damage = (total_damage - player_damage) * kArmorWearoff;
-
-    if (armor_damage > (float) armor_value) {
+    float player_damage = total_damage * kArmorRatio;
+    float armor_wearoff = (total_damage - player_damage) * kArmorWearoff;
+    if (armor_wearoff > (float) armor_value) {
         /* Armor will get destroyed. The rest of damage is up to the player. */
-        armor_damage = (float) armor_value * (1.f / kArmorWearoff);
+        auto armor_damage = (float) armor_value * (1.f / kArmorWearoff);
         return total_damage - armor_damage;
     } else {
         return player_damage;
@@ -430,21 +440,29 @@ void UpdateBombVisuals() {
 
     /* Calculate bomb damage. */
     {
-        auto local_player = entities::CCSPlayer{ Entity::getLocalPlayer().GetEntityAddress() };
-        auto player_position = local_player.get_origin(); // TODO: Use the eye position - 19 %
+
+        auto target_player = entity_list.get_local_player();
+        if(target_player.get_observer_mode() != OBS_MODE_NONE && target_player.get_observer_mode() != OBS_MODE_POI) {
+            auto observe_target = entity_list.get_from_handle(target_player.get_observer_target());
+            if(observe_target.has_value() && observe_target->isValidPlayer()) {
+                target_player = entities::CCSPlayer{ observe_target->GetEntityAddress() };
+            }
+        }
+
+        auto player_position = target_player.get_origin(); // TODO: Use the eye position - 19 %
         auto bomb_position = bomb->get_origin();
 
 #undef max
         auto bomb_damage = 500.f; // 500 - default, if radius is not written on the map https://i.imgur.com/mUSaTHj.png
         auto player_bomb_damage = std::max(
-                // The zPoint is determined between the players eye level and 30 % above their feed. Just take two "close enought" points and take the highest.
+                // The zPoint is determined between the players eye level and 30 % above their feed. Just take two "close enough" points and take the highest.
                 calculate_bomb_damage(player_position, bomb_position  + Vector3f{ 0, 0, 40 }, bomb_damage),
                 calculate_bomb_damage(player_position + Vector3f{ 0, 0, 80 }, bomb_position, bomb_damage)
         );
-        player_bomb_damage = damage_apply_armor(player_bomb_damage, local_player.get_armor_value());
+        player_bomb_damage = damage_apply_armor(player_bomb_damage, target_player.get_armor_value());
 
         bomb_ui::damage = floor(player_bomb_damage);
-        bomb_ui::damage_critical = local_player.get_health() <= bomb_ui::damage;
+        bomb_ui::damage_critical = target_player.get_health() <= bomb_ui::damage;
     }
 
     /* Calculate timings / defuser */
@@ -464,10 +482,7 @@ void UpdateBombVisuals() {
         defuser.will_succeed = defuser.time_remaining < bomb_ui::time_remaining;
 
         player_info_t player_info;
-        if(!player_info_helper.load_info(defuse_handle.get_entity_index(), player_info)) {
-            /* 22, include the null terminator */
-            memcpy(player_info.name, "Unknown (load failed)", 22);
-        }
+        (void) player_info_helper.load_info(defuse_handle.get_entity_index(), player_info);
         defuser.name = player_info.name;
     }
     //std::cout << std::dec << "Damage: " << flAdjustedDamage << " Time: " << (bomb_blow - globals.cur_time) << " Armor: " << local_player.get_armor_value() << " Heavy: " << local_player.has_heavy_armor() << "\n";
@@ -480,20 +495,20 @@ bool sort_player_score_entries(const overlay::vars::PlayerRank& a, const overlay
         return false;
     }
 
-    if(a.kills > b.kills) {
-        return true;
-    } else if(a.kills < b.kills) {
-        return false;
-    }
-
     if(a.deaths > b.deaths) {
         return false;
     } else if(a.deaths < b.deaths) {
         return true;
     }
 
+    if(a.kills > b.kills) {
+        return true;
+    } else if(a.kills < b.kills) {
+        return false;
+    }
+
     assert(a.entity_index != b.entity_index);
-    return a.entity_index < b.entity_index;
+    return a.entity_index > b.entity_index;
 }
 
 void UpdatePlayerScores() {
@@ -636,11 +651,17 @@ int main(int argc, char* argv[], char* envp[])
     std::cout << "enter loop\n";
     while (true)
     {
-        if (!engine::IsInGame())
+        overlay::vars::is_ingame = engine::IsInGame();
+        if (!overlay::vars::is_ingame)
         {
+            overlay::poll_input();
+            overlay::render_frame();
             Sleep(500);
             continue;
         }
+
+        auto ts_update_start = std::chrono::high_resolution_clock::now();
+
         entity_list.cache_entities();
 
         Entity LocalPlayerEnt = Entity::getLocalPlayer();
@@ -658,6 +679,7 @@ int main(int argc, char* argv[], char* envp[])
         }
 
         // Render all
+        auto ts_render_start = std::chrono::high_resolution_clock::now();
         overlay::poll_input();
         overlay::render_frame();
 
@@ -680,7 +702,9 @@ int main(int argc, char* argv[], char* envp[])
             }
         }
 
+        auto ts_end = std::chrono::high_resolution_clock::now();
+        //std::cout << std::format("update: {}, render: {}", duration_cast<std::chrono::milliseconds>(ts_render_start - ts_update_start), duration_cast<std::chrono::milliseconds>(ts_end - ts_render_start)) << "\n";
 
-        Sleep(3);
+        Sleep(csgo_settings::update_sleep_delay);
     }
 }

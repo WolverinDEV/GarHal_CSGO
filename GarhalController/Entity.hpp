@@ -5,6 +5,10 @@ namespace netvar {
     struct ClientClass;
 }
 
+namespace entities {
+    struct EntityHandle;
+}
+
 // TODO:
 // - Seperate different entity functionality into own classes
 // - do not store any data
@@ -47,7 +51,7 @@ public:
     uint8_t getHealth();
     uint8_t getForceAttack();
     uint8_t getTeam();
-    uint32_t getObserverTarget();
+    entities::EntityHandle getObserverTarget();
     uint32_t getObserverMode();
     void BuildBonePairs();
     void SetFlashAlpha(float num);

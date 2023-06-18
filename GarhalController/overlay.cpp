@@ -29,6 +29,8 @@
 static std::unique_ptr<overlay::ImguiContext> imgui_context{nullptr};
 
 namespace overlay::vars {
+    bool is_ingame;
+
     std::vector<ESPPlayerEntity> esp_entities{};
     std::vector<ObserverEntry> observer_entries{};
 
@@ -455,15 +457,15 @@ void render_player_ranks() {
     constexpr static auto kScoreGap = 4.f;
     constexpr static auto kScoreEnd = 2850.f;
 
-    constexpr static auto kCenterGapMM = 212.f;
+    constexpr static auto kCenterGapMM = 200.f;
     constexpr static auto kCenterGapNormal = 48.f;
 
+    constexpr static auto kSeparatorWidth = 250.f;
 
-    size_t player_count_ct = players_ct.size();
-    size_t player_count_t = players_t.size();
+    size_t player_count_ct = 5; //players_ct.size();
+    size_t player_count_t = 5; //players_t.size();
 
-    float player_offset = (kUnitBaseH + 5 * kScoreGap - kCenterGapMM - (float) (player_count_ct + player_count_t - 1) * (kScoreHeight + kScoreGap)) / 2;
-    //ImGui::GetWindowDrawList()->AddLine(ImVec2{ 1000, imgui_context->yScreen * player_offset / kUnitBaseH, }, ImVec2{2000, imgui_context->yScreen * player_offset / kUnitBaseH }, IM_COL32(255, 0, 255, 255));
+    float player_offset = (kUnitBaseH + 10 * kScoreGap - kCenterGapMM - (float) (player_count_ct + player_count_t - 1) * (kScoreHeight + kScoreGap)) / 2;
 
     auto display_rank = [](int rank) {
         if(rank >= kRankNames.size()) {
@@ -475,6 +477,8 @@ void render_player_ranks() {
     };
 
     auto render_rank_list = [display_rank](const std::vector<PlayerRank>& ranks, float y_offset) {
+        //ImGui::GetWindowDrawList()->AddLine(ImVec2{ 1000, imgui_context->yScreen * y_offset / kUnitBaseH, }, ImVec2{2000, imgui_context->yScreen * y_offset / kUnitBaseH }, IM_COL32(255, 0, 255, 255));
+
         int sum_ranks{0};
         for(size_t index{0}; index < ranks.size(); index++) {
             auto offset_y = y_offset + (float) index * (kScoreHeight + kScoreGap);
@@ -488,6 +492,7 @@ void render_player_ranks() {
             ImGui::Text("%s %s (%i Wins)", kCompTeammateColor[color], display_rank(ranks[index].rank), ranks[index].wins);
             sum_ranks += ranks[index].rank;
         }
+        ImGui::Spacing();
         ImGui::Spacing();
         ImGui::SetCursorPosX(imgui_context->xScreen * kScoreEnd / kUnitBaseW);
         ImGui::Text("Sum Ranks: %i", sum_ranks);
@@ -513,10 +518,11 @@ void overlay::render_frame() {
     ImGui::SetNextWindowPos(ImVec2(0, 0));
     ImGui::SetNextWindowSize(ImVec2(imgui_context->xScreen, imgui_context->yScreen));
 
-    static const auto dwFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoClipping;
-    ImGui::Begin("overlay", nullptr, dwFlags);
-    ImGui::SetWindowFontScale(csgo_settings::ui_scale);
-    {
+    if(vars::is_ingame){
+        static const auto dwFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoClipping;
+        ImGui::Begin("overlay", nullptr, dwFlags);
+        ImGui::SetWindowFontScale(csgo_settings::ui_scale);
+
         render_esp_entries();
         render_observer_entries();
         render_bomb_info();
@@ -531,8 +537,9 @@ void overlay::render_frame() {
             ImGui::Text("FPS: %.2f", ImGui::GetIO().Framerate);
             ImGui::PopFont();
         }
+
+        ImGui::End();
     }
-    ImGui::End();
 
     render_menu(*imgui_context);
 
@@ -578,4 +585,7 @@ void overlay::poll_input() {
     }
 
     overlay::vars::display_player_ranks = ImGui::IsCustomKeyPressed(VK_TAB, true);
+    if(ImGui::IsCustomKeyPressed(VK_NUMPAD0, false)) {
+        csgo_settings::player_esp = !csgo_settings::player_esp;;
+    }
 }

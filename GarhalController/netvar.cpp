@@ -339,7 +339,7 @@ bool netvar::dump_all(std::string &error) {
         class_definition.name = current_class->get_name();
         class_definition.class_id = current_class->get_class_id();
 
-        std::cout << std::dec << current_class->get_class_id() << ": " << current_class->get_name() << " (" << recv_table->get_name() << " | " << recv_table->get_property_count() << ")" << " at " << std::hex << current_class->address << "\n";
+        //std::cout << std::dec << current_class->get_class_id() << ": " << current_class->get_name() << " (" << recv_table->get_name() << " | " << recv_table->get_property_count() << ")" << " at " << std::hex << current_class->address << "\n";
         if(!fill_class_info_from_recv_table(discovered_tables, class_definition, *recv_table, error)) {
             return false;
         }

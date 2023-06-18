@@ -60,6 +60,9 @@ void render_settings(const overlay::ImguiContext& ctx)
 {
     ImGui::PushFont(ctx.mapFont.at(18));
     ImGui::Text("Blah blah whatever info we want here");
+    ImGui::Separator();
+
+    ImGui::SliderInt("Update sleep delay", &csgo_settings::update_sleep_delay, 0, 500);
 
     ImGuiStyle* style = &ImGui::GetStyle();
     ImGui::Separator();

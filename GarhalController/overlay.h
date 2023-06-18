@@ -64,6 +64,8 @@ namespace overlay {
     }
 
     namespace vars {
+        extern bool is_ingame;
+
         extern std::vector<ESPPlayerEntity> esp_entities;
         extern std::vector<ObserverEntry> observer_entries;
 

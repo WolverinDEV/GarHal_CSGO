@@ -8,7 +8,7 @@ using namespace hazedumper::signatures;
 
 bool engine::worldToScreen(const Vector3& from, Vector3& to)
 {
-    WorldToScreenMatrix matrix = Driver->ReadVirtualMemoryTV<WorldToScreenMatrix>(ProcessId,
+    auto matrix = Driver->ReadVirtualMemoryTV<WorldToScreenMatrix>(ProcessId,
                                                                                   ClientAddress + dwViewMatrix,
                                                                                   sizeof(WorldToScreenMatrix));
 
@@ -26,8 +26,7 @@ bool engine::worldToScreen(const Vector3& from, Vector3& to)
 
 bool engine::IsInGame()
 {
-    auto client_state = memory::dereference(EngineAddress, dwClientState);
-    auto game_state = memory::read<uint8_t>(client_state + dwClientState_State).value_or(0);
+    auto game_state = memory::dereferenced_read<uint8_t>(EngineAddress, memory::offsets_t<2>{ dwClientState, dwClientState_State }).value_or(0);
     return GetGameState(game_state) == InGame;
 }
 

@@ -17,6 +17,7 @@ namespace csgo_settings
     extern int AimbotBullets;
 
     extern bool player_esp;
+    extern int update_sleep_delay;
 
     extern bool show_spectators;
     extern bool show_spectator_perspective;

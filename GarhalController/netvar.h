@@ -92,6 +92,11 @@ namespace netvar {
         inline auto operator!=(const name& other) const -> bool { \
             return this->address != other.address; \
         }                                                  \
+        \
+        inline auto operator=(const name& other) { \
+            this->address = other.address;                \
+            return *this; \
+        } \
 \
         [[nodiscard]]\
         inline auto get_address() const -> uint32_t{\

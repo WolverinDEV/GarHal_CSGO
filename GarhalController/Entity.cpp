@@ -9,6 +9,7 @@
 #include "sdk.hpp"
 #include "memory.hpp"
 #include "./netvar.h"
+#include "netvars.h"
 
 // hazedumper namespace
 using namespace hazedumper::netvars;
@@ -52,8 +53,8 @@ uint8_t Entity::getTeam()
     return OurTeam;
 }
 
-uint32_t Entity::getObserverTarget() {
-    return Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, EntityAddress + m_hObserverTarget);
+entities::EntityHandle Entity::getObserverTarget() {
+    return entities::EntityHandle{ Driver->ReadVirtualMemoryT<uint32_t>(ProcessId, EntityAddress + m_hObserverTarget) };
 }
 
 uint32_t Entity::getObserverMode() {
